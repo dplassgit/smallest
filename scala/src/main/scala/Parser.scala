@@ -54,14 +54,15 @@ class Parser(
   private def statement(): Unit =
     _token.tokenType() match
       case TokenType.Keyword => startsWithKeyword()
-      case TokenType.Variable => assignment()
+      case TokenType.Variable => startsWithVariable()
       case _ => fail(s"Cannot parse $_token")
 
-  private def assignment() =
+  private def startsWithVariable() =
     val name = _token.value()
     advance() // eat the variable
 
     // TODO: if ., it's an array assignment
+    // TODO: if (, it's a function call
 
     expectSymbol(SymbolType.Eq)
 
@@ -75,7 +76,7 @@ class Parser(
   private def startsWithKeyword(): Unit =
     _token.keyword() match
       case KeywordType.PrintChar | KeywordType.PrintInt => parsePrint()
-      //case KeywordType.While => parseWhile()
+      case KeywordType.While => parseWhile()
       case KeywordType.If => parseIf()
       case _ => fail(s"Cannot parse keyword $_token")
 
@@ -130,38 +131,26 @@ class Parser(
       emit("call printf")
       emit("add RSP, 0x20")
 
-  /*private def parseFor(): Unit =
-    expectKeyword(KeywordType.For)
-    if _token.tokenType() != TokenType.Variable then
-      fail(s"Expected variable, saw $_token")
-    val varName = _token.value()
-    addData(s"_$varName: dd 0")
-    advance()
+  private def parseWhile(): Unit =
+    expectKeyword(KeywordType.While)
+    val startWhileLabel = nextLabel("startWhile")
+    emitLabel(startWhileLabel)
+    val stopType = expr()
+    checkTypes(VarType.VarTypeInt, stopType)
+    val endWhileLabel = nextLabel("endWhile")
+    emit(s"cmp AL, 0x00") // anything but 0 is true
+    emit(s"je $endWhileLabel")
 
-    expectSymbol(SymbolType.Eq)
-    val fromType = expr()
-    emit(s"mov [_$varName], EAX")
-    expectKeyword(KeywordType.To)
-
-    val forLabel = nextLabel("for")
-    val endforLabel = nextLabel("endfor")
-    emitLabel(forLabel)
-
-    val toType = expr()
-
-    emit(s"cmp [_$varName], EAX")
-    emit(s"jge $endforLabel")
-
-    while !_token.isKeyword(KeywordType.Endfor) && _token.tokenType() != TokenType.EndOfFile do
+    expectSymbol(SymbolType.OpenParen)
+    while !_token.isSymbol(SymbolType.CloseParen) && _token.tokenType() != TokenType.EndOfFile do
       statement()
+    expectSymbol(SymbolType.CloseParen)
 
-    expectKeyword(KeywordType.Endfor)
-    emit(s"inc DWORD [_$varName]")
-    emit(s"jmp $forLabel")
-    emitLabel(endforLabel)
-    */
+    emit(s"jmp $startWhileLabel")
+    emitLabel(endWhileLabel)
 
 
+  // TODO: support the more complex expression syntax
   private def expr(): VarType =
     val leftType = atom()
 
@@ -220,6 +209,10 @@ class Parser(
   private def nextLabel(prefix: String): String =
     _id += 1
     s"${prefix}_$_id"
+
+  private def checkTypes(expected: VarType, actual: VarType) =
+    if expected != actual then
+      fail(s"Type mismatch: expected $expected, found $actual")
 
   private def addData(name: String, varType: VarType): Unit =
     varType match

@@ -52,7 +52,6 @@ class Lexer(
     while _cc.isLetter do
       soFar += _cc
       advance()
-    // hm... don't love the "always an int"
     newVariable(soFar.toString)
 
   private def makeNumber(): Token =
@@ -63,7 +62,7 @@ class Lexer(
       soFar += _cc
       advance()
     // Int constant
-    return newConstant(soFar.toString, VarType.VarTypeInt)
+    return newConstant(soFar.toString)
 
   private def advance() =
     if _loc < _text.size then

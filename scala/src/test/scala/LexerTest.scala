@@ -91,27 +91,12 @@ class LexerTest extends munit.FunSuite:
     var t = lexer.nextToken()
     assert(t.tokenType() == TokenType.Variable)
     assert(t.value() == "ab")
+    assert(t.varType() == VarType.VarTypeArr)
     t = lexer.nextToken()
     assert(t.tokenType() == TokenType.Variable)
     assert(t.value() == "cd")
-  }
-
-  /*test("upper variables") {
-    val lexer = new Lexer("A I S")
-    var t = lexer.nextToken()
-    assert(t.tokenType() == TokenType.Variable)
-    assert(t.value() == "A")
-    assert(t.varType() == VarType.VarTypeFloat)
-    t = lexer.nextToken()
-    assert(t.tokenType() == TokenType.Variable)
-    assert(t.value() == "I")
     assert(t.varType() == VarType.VarTypeInt)
-    t = lexer.nextToken()
-    assert(t.tokenType() == TokenType.Variable)
-    assert(t.value() == "S")
-    assert(t.varType() == VarType.VarTypeString)
   }
-  */
 
   test("keyword") {
     val lexer = new Lexer("$")
@@ -150,9 +135,10 @@ class LexerTest extends munit.FunSuite:
   }
 
   test("all symbols") {
-    val lexer = new Lexer("<=!*+-")
+    val lexer = new Lexer("<=!*+-().")
     val expected = List(SymbolType.Lt, SymbolType.Eq,
-      SymbolType.Neq, SymbolType.Mult, SymbolType.Plus, SymbolType.Minus)
+      SymbolType.Neq, SymbolType.Mult, SymbolType.Plus, SymbolType.Minus,
+      SymbolType.OpenParen, SymbolType.CloseParen, SymbolType.Dot)
 
     for st <- expected do
       val t = lexer.nextToken()
@@ -163,7 +149,7 @@ class LexerTest extends munit.FunSuite:
   }
 
   test("invalid symbols are invalid") {
-    val lexer = new Lexer("/")
+    val lexer = new Lexer("\\")
     intercept[Exception]{lexer.nextToken()}
   }
 

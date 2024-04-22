@@ -90,17 +90,18 @@ class ParserTest extends munit.FunSuite:
     assert(code.contains("  imul EAX, EBX"))
   }
 
-  /*
-  test("for") {
-    val parser = new Parser("for i = 1 to 10 println i endfor")
+  test("while") {
+    val parser = new Parser("i=1 ~i<10 ( #i i=i+1 )")
     val code = parser.parse()
+    println(code)
+    assert(code.contains("startWhile_1:"))
     assert(code.contains("  call printf"))
-    assert(code.contains("  inc DWORD [_i]"))
-    assert(code.contains("  cmp [_i], EAX"))
-    assert(code.contains("  jge endfor_2"))
+    assert(code.contains("  setl AL"))
+    assert(code.contains("  cmp AL, 0x00"))
+    assert(code.contains("  je endWhile_2"))
+    assert(code.contains("endWhile_2:"))
     assert(code.contains("  _i: dd 0"))
   }
-  */
 
   test("print comparing ints") {
     val parser = new Parser("# 1=2")
