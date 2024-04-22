@@ -61,6 +61,8 @@ class Token(
 
   def isKeyword(kw: KeywordType) =
     _tokenType == TokenType.Keyword && _keyword == kw
+  def isSymbol(st: SymbolType) =
+    _tokenType == TokenType.Symbol && _symbol == st
 
 end Token
 

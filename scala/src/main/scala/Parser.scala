@@ -13,14 +13,13 @@ class Parser(
   private val _constants: Map[String, String] = Map(),
   private val _floatConstants: Map[String, String] = Map(),
 
-  private val OPCODES: Map[(SymbolType, VarType), List[String]] = Map(
-    (SymbolType.Plus, VarType.VarTypeInt) -> List("add EAX, EBX"),
-    (SymbolType.Mult, VarType.VarTypeInt) -> List("imul EAX, EBX"),
-    (SymbolType.Minus, VarType.VarTypeInt) ->
-        List("xchg EAX, EBX", "sub EAX, EBX"),
-    (SymbolType.Eq, VarType.VarTypeInt) -> List("cmp EBX, EAX", "setz AL"),
-    (SymbolType.Neq, VarType.VarTypeInt) -> List("cmp EBX, EAX", "setnz AL"),
-    (SymbolType.Lt, VarType.VarTypeInt) -> List("cmp EBX, EAX", "setl AL"),
+  private val OPCODES: Map[SymbolType, List[String]] = Map(
+    SymbolType.Plus -> List("add EAX, EBX"),
+    SymbolType.Mult -> List("imul EAX, EBX"),
+    SymbolType.Minus -> List("xchg EAX, EBX", "sub EAX, EBX"),
+    SymbolType.Eq -> List("cmp EBX, EAX", "setz AL"),
+    SymbolType.Neq -> List("cmp EBX, EAX", "setnz AL"),
+    SymbolType.Lt -> List("cmp EBX, EAX", "setl AL"),
     ),
 
   private var _token: Token = null,
@@ -77,10 +76,10 @@ class Parser(
     _token.keyword() match
       case KeywordType.PrintChar | KeywordType.PrintInt => parsePrint()
       //case KeywordType.While => parseWhile()
-      //case KeywordType.If => parseIf()
+      case KeywordType.If => parseIf()
       case _ => fail(s"Cannot parse keyword $_token")
 
-  /*private def parseIf(): Unit =
+  private def parseIf(): Unit =
     expectKeyword(KeywordType.If)
     val exprType = expr()
     val elseLabel = nextLabel("else")
@@ -88,26 +87,27 @@ class Parser(
     emit("cmp AL, 0x01")
     emit(s"jne $elseLabel")
 
-    expectSymbol(SymbolType.LBrace)
-    while !_token.isKeyword(KeywordType.Endif) &&
-          !_token.isKeyword(KeywordType.Else) &&
+    expectSymbol(SymbolType.OpenParen)
+    while !_token.isSymbol(SymbolType.CloseParen) &&
           _token.tokenType() != TokenType.EndOfFile do
       statement()
-    if _token.tokenType() == TokenType.EndOfFile then
-      fail("Expected ELSE or EOF, saw EOF")
+    expectSymbol(SymbolType.CloseParen)
+
     val hasElse = _token.isKeyword(KeywordType.Else)
     if hasElse then
       emit(s"jmp $endifLabel")
     emitLabel(elseLabel)
+
     if hasElse then
       advance() // eat the else
-      while !_token.isKeyword(KeywordType.Endif) &&
+      expectSymbol(SymbolType.OpenParen)
+      while !_token.isSymbol(SymbolType.CloseParen) &&
           _token.tokenType() != TokenType.EndOfFile do
         statement()
-    expectKeyword(KeywordType.Endif)
+      expectSymbol(SymbolType.CloseParen)
+
     if hasElse then
       emitLabel(endifLabel)
-      */
 
   private def parsePrint(): Unit =
     val isPrintChar = _token.isKeyword(KeywordType.PrintChar)
@@ -115,7 +115,6 @@ class Parser(
     advance() // eat the keyword
 
     val exprType = expr()
-    // TODO: make sure it's an int
     if isPrintChar then
       emit("mov CL, AL")
       emit("sub RSP, 0x20")
@@ -168,13 +167,15 @@ class Parser(
 
     if _token.tokenType() == TokenType.Symbol then
       val sym = _token.symbolType()
+      if !OPCODES.contains(sym) then 
+        return leftType
       advance()
       emit("push RAX")
 
       val rightType = atom()
       emit("pop RBX")
 
-      val code = OPCODES.get((sym, leftType))
+      val code = OPCODES.get(sym)
       if code.isDefined then
         for line <- code.get do
           emit(line)

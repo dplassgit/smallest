@@ -117,14 +117,12 @@ class ParserTest extends munit.FunSuite:
     assert(code.contains("endif_2:") == false)
   }
 
-  /*
   test("if_else") {
-    val parser = new Parser("? 1=2 { $ 89 $ 101 $ 115 $ 10 } : { $ 110 $ 111 $ 10 }")
+    val parser = new Parser("? 1=2 ( $ 89 $ 101 $ 115 $ 10 ) : ( $ 110 $ 111 $ 10 )")
     val code = parser.parse()
     assert(code.contains("else_1:"))
     assert(code.contains("  jmp endif_2"))
     assert(code.contains("endif_2:"))
   }
-  */
 
 end ParserTest
