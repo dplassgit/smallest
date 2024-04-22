@@ -25,6 +25,9 @@ enum SymbolType(t: String):
   case Eq extends SymbolType("=")
   case Neq extends SymbolType("!")
   case Lt extends SymbolType("<")
+  case Dot extends SymbolType(".")
+  case OpenParen extends SymbolType("(")
+  case CloseParen extends SymbolType(")")
   case NoSymbol extends SymbolType("")
   def text(): String = t
 
@@ -61,7 +64,7 @@ class Token(
 
 end Token
 
-def newVariable(name: String, vt: VarType): Token =
-    new Token(TokenType.Variable, name, _varType=vt)
+def newVariable(name: String): Token =
+    new Token(TokenType.Variable, name)
 def newConstant(value: String, vt: VarType): Token =
     new Token(TokenType.Constant, value, _varType=vt)

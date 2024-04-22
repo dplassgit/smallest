@@ -20,10 +20,9 @@ class TokenTest extends munit.FunSuite:
   }
 
   test("creating a variable sets the token type") {
-    val t = newVariable("name", VarType.VarTypeInt)
+    val t = newVariable("name")
     assert(t.tokenType() == TokenType.Variable)
     assert(t.value() == "name")
-    assert(t.varType() == VarType.VarTypeInt)
   }
 
   test("creating a constant sets the token type") {

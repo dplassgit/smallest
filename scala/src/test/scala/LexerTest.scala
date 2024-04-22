@@ -87,19 +87,13 @@ class LexerTest extends munit.FunSuite:
   }
 
   test("variables") {
-    val lexer = new Lexer("a i s")
+    val lexer = new Lexer("ab cd")
     var t = lexer.nextToken()
     assert(t.tokenType() == TokenType.Variable)
-    assert(t.value() == "a")
-    assert(t.varType() == VarType.VarTypeInt)
+    assert(t.value() == "ab")
     t = lexer.nextToken()
     assert(t.tokenType() == TokenType.Variable)
-    assert(t.value() == "i")
-    assert(t.varType() == VarType.VarTypeInt)
-    t = lexer.nextToken()
-    assert(t.tokenType() == TokenType.Variable)
-    assert(t.value() == "s")
-    assert(t.varType() == VarType.VarTypeInt)
+    assert(t.value() == "cd")
   }
 
   /*test("upper variables") {
@@ -129,7 +123,7 @@ class LexerTest extends munit.FunSuite:
   test("all keywords") {
     // All keywords except "NoKeyword"
     val allKeywords = KeywordType.values.filter(_ != KeywordType.NoKeyword)
-    val program = allKeywords.map(_.toString).mkString(" ")
+    val program = allKeywords.map(_.text()).mkString(" ")
     val lexer = new Lexer(program)
 
     for kw <- allKeywords do
@@ -169,7 +163,7 @@ class LexerTest extends munit.FunSuite:
   }
 
   test("invalid symbols are invalid") {
-    val lexer = new Lexer("%")
+    val lexer = new Lexer("/")
     intercept[Exception]{lexer.nextToken()}
   }
 

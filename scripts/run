@@ -1,0 +1,10 @@
+BASE=`basename -s .spl $1`
+rm -f $BASE.exe $BASE.obj $BASE.asm
+
+scalac.bat scala/src/main/scala/*.scala -d smallestc.jar
+
+scala.bat smallestc.jar < $1 > $BASE.asm || exit
+
+nasm -fwin64 $BASE.asm && gcc $BASE.obj -o $BASE.exe
+
+test -x $BASE.exe && ./$BASE.exe

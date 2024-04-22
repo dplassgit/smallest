@@ -22,10 +22,6 @@ class Parser(
     (SymbolType.Neq, VarType.VarTypeInt) -> List("cmp EBX, EAX", "setnz AL"),
     (SymbolType.Lt, VarType.VarTypeInt) -> List("cmp EBX, EAX", "setl AL"),
     ),
-  private val CMP_SYMBOLS: Set[SymbolType] = Set(
-    SymbolType.Eq,
-    SymbolType.Neq,
-    SymbolType.Lt),
 
   private var _token: Token = null,
   private var _id: Int = 0,
@@ -40,7 +36,7 @@ class Parser(
     emit0("global main")
     emit0("section .text")
     emit0("main:")
-   // statements()
+    statements()
     emit("extern exit")
     emit("call exit")
     if _data.size > 0 then
@@ -52,7 +48,7 @@ class Parser(
   private def advance(): Unit =
     _token = _lexer.nextToken()
 
-  /*private def statements(): Unit =
+  private def statements(): Unit =
     while _token.tokenType() != TokenType.EndOfFile do
       statement()
 
@@ -64,40 +60,35 @@ class Parser(
 
   private def assignment() =
     val name = _token.value()
-    val varType = _token.varType()
     advance() // eat the variable
+
+    // TODO: if ., it's an array assignment
 
     expectSymbol(SymbolType.Eq)
 
     val exprType = expr()
-    checkTypes(varType, exprType)
 
     // will only add if it doesn't exist yet
-    addData(name, varType)
+    addData(name, exprType)
 
-    varType match
-      case VarType.VarTypeInt => emit(s"mov [_$name], EAX")
-      case VarType.VarTypeFloat => emit(s"movq [_$name], XMM0")
-      case VarType.VarTypeString => emit(s"mov [_$name], RAX")
-      case _ => fail(s"Cannot assign to $varType yet")
+    emit(s"mov [_$name], EAX")
 
   private def startsWithKeyword(): Unit =
     _token.keyword() match
-      case KeywordType.Println | KeywordType.Print => parsePrint()
-      case KeywordType.For => parseFor()
-      case KeywordType.If => parseIf()
+      case KeywordType.PrintChar | KeywordType.PrintInt => parsePrint()
+      //case KeywordType.While => parseWhile()
+      //case KeywordType.If => parseIf()
       case _ => fail(s"Cannot parse keyword $_token")
 
-  private def parseIf(): Unit =
+  /*private def parseIf(): Unit =
     expectKeyword(KeywordType.If)
     val exprType = expr()
-    checkTypes(VarType.VarTypeBool, exprType)
     val elseLabel = nextLabel("else")
     val endifLabel = nextLabel("endif")
     emit("cmp AL, 0x01")
     emit(s"jne $elseLabel")
 
-    expectKeyword(KeywordType.Then)
+    expectSymbol(SymbolType.LBrace)
     while !_token.isKeyword(KeywordType.Endif) &&
           !_token.isKeyword(KeywordType.Else) &&
           _token.tokenType() != TokenType.EndOfFile do
@@ -116,54 +107,40 @@ class Parser(
     expectKeyword(KeywordType.Endif)
     if hasElse then
       emitLabel(endifLabel)
+      */
 
   private def parsePrint(): Unit =
-    val isPrintln = _token.isKeyword(KeywordType.Println)
+    val isPrintChar = _token.isKeyword(KeywordType.PrintChar)
 
     advance() // eat the keyword
 
     val exprType = expr()
-    exprType match
-      case VarType.VarTypeInt =>
-        addData("INT_FMT: db '%d', 0")
-        emit("mov RCX, INT_FMT")
-        emit("mov EDX, EAX")
-      case VarType.VarTypeFloat =>
-        addData("FLOAT_FMT: db '%.16g', 0")
-        emit("mov RCX, FLOAT_FMT")
-        emit("movq RDX, XMM0")
-      case VarType.VarTypeString =>
-        emit("mov RCX, RAX")
-      case VarType.VarTypeBool =>
-        addData("TRUE: db 'true', 0")
-        addData("FALSE: db 'false', 0")
-        emit("cmp AL, 1")
-        emit("mov RCX, FALSE")
-        emit("mov RDX, TRUE")
-        emit("cmovz RCX, RDX")
-      case _ => fail(s"Cannot print $exprType yet")
-
-    emit("sub RSP, 0x20")
-    emit("extern printf")
-    emit("call printf")
-    if isPrintln then
+    // TODO: make sure it's an int
+    if isPrintChar then
+      emit("mov CL, AL")
+      emit("sub RSP, 0x20")
       emit("extern putchar")
-      emit("mov RCX, 10")
       emit("call putchar")
-    emit("add RSP, 0x20")
+      emit("add RSP, 0x20")
+    else
+      addData("INT_FMT: db '%d', 0")
+      emit("mov RCX, INT_FMT")
+      emit("mov EDX, EAX")
+      emit("sub RSP, 0x20")
+      emit("extern printf")
+      emit("call printf")
+      emit("add RSP, 0x20")
 
-  private def parseFor(): Unit =
+  /*private def parseFor(): Unit =
     expectKeyword(KeywordType.For)
     if _token.tokenType() != TokenType.Variable then
       fail(s"Expected variable, saw $_token")
-    checkTypes(VarType.VarTypeInt, _token.varType())
     val varName = _token.value()
     addData(s"_$varName: dd 0")
     advance()
 
     expectSymbol(SymbolType.Eq)
     val fromType = expr()
-    checkTypes(VarType.VarTypeInt, fromType)
     emit(s"mov [_$varName], EAX")
     expectKeyword(KeywordType.To)
 
@@ -172,7 +149,6 @@ class Parser(
     emitLabel(forLabel)
 
     val toType = expr()
-    checkTypes(VarType.VarTypeInt, toType)
 
     emit(s"cmp [_$varName], EAX")
     emit(s"jge $endforLabel")
@@ -184,6 +160,7 @@ class Parser(
     emit(s"inc DWORD [_$varName]")
     emit(s"jmp $forLabel")
     emitLabel(endforLabel)
+    */
 
 
   private def expr(): VarType =
@@ -192,28 +169,16 @@ class Parser(
     if _token.tokenType() == TokenType.Symbol then
       val sym = _token.symbolType()
       advance()
-      leftType match
-        case VarType.VarTypeInt => emit("push RAX")
-        case VarType.VarTypeFloat =>
-          emit("sub RSP, 0x08")
-          emit("movq [RSP], XMM0")
-        case _ => fail(s"Cannot do arithmetic on $leftType yet")
+      emit("push RAX")
 
       val rightType = atom()
-      checkTypes(leftType, rightType)
-      leftType match
-        case VarType.VarTypeInt => emit("pop RBX")
-        case VarType.VarTypeFloat =>
-          emit("movq XMM1, [RSP]")
-          emit("add RSP, 0x08")
-        case _ => fail(s"Cannot do arithmetic on $leftType yet")
+      emit("pop RBX")
 
       val code = OPCODES.get((sym, leftType))
       if code.isDefined then
         for line <- code.get do
           emit(line)
-        if CMP_SYMBOLS.contains(sym) then
-          return VarType.VarTypeBool
+        return VarType.VarTypeInt
       else
         fail(s"Cannot do $sym arithmetic on $leftType yet")
 
@@ -230,27 +195,16 @@ class Parser(
     varType match
       case VarType.VarTypeInt =>
         emit(s"mov EAX, ${_token.value()}")
-      case VarType.VarTypeFloat =>
-        val name = addConstant(_token.value(), varType)
-        emit(s"movq XMM0, [$name]")
-      case VarType.VarTypeString =>
-        val name = addConstant(_token.value(), varType)
-        emit(s"mov RAX, $name")
       case _ => fail(s"Cannot parse atom constant $_token")
     advance() // eat the token we just processed
     varType
 
   private def atomVariable(varType: VarType): VarType =
-    varType match
-      case VarType.VarTypeInt =>
-        emit(s"mov EAX, [_${_token.value()}]")
-      case VarType.VarTypeFloat =>
-        emit(s"movq XMM0, [_${_token.value()}]")
-      case VarType.VarTypeString =>
-        emit(s"mov RAX, [_${_token.value()}]")
-      case _ => fail(s"Cannot parse atomVariable $_token")
+    val name = _token.value()
     advance() // eat the token we just processed
-    varType
+    // TODO: if ., it's an array get
+    emit(s"mov EAX, [_$name]")
+    VarType.VarTypeInt
 
   private def expectSymbol(st: SymbolType) =
     if _token.tokenType() != TokenType.Symbol || _token.symbolType() != st then
@@ -262,48 +216,17 @@ class Parser(
       fail(s"Expected $kw, found $_token")
     advance()
 
-  private def checkTypes(expected: VarType, actual: VarType) =
-    if expected != actual then
-      fail(s"Type mismatch: expected $expected, found $actual")
-
   private def nextLabel(prefix: String): String =
     _id += 1
     s"${prefix}_$_id"
 
-  private def addConstant(value: String, varType: VarType): String =
-    varType match
-      case VarType.VarTypeString =>
-        val maybeName = _constants.get(value)
-        if maybeName.isDefined then
-          maybeName.get
-        else
-          val name = nextLabel("CONST")
-          addData(s"$name: db '$value', 0")
-          // add the thing
-          _constants.addOne(value, name)
-          name
-      case VarType.VarTypeFloat =>
-        val maybeName = _floatConstants.get(value)
-        if maybeName.isDefined then
-          maybeName.get
-        else
-          val name = nextLabel("FLOAT")
-          addData(s"$name: dq $value")
-          // add the thing
-          _floatConstants.addOne(value, name)
-          name
-      case _ => fail(s"Cannot add constant of type $varType")
-
   private def addData(name: String, varType: VarType): Unit =
     varType match
       case VarType.VarTypeInt => addData(s"_$name: dd 0")
-      case VarType.VarTypeFloat => addData(s"_$name: dq 0.0")
-      case VarType.VarTypeString => addData(s"_$name: dq 0")
       case _ => fail(s"Cannot add data of type $varType")
 
   private def addData(entry: String): Unit =
     _data.add(entry)
-  */
 
   private def emitLabel(label: String): Unit =
     emit0(s"$label:")

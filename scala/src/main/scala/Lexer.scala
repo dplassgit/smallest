@@ -24,18 +24,13 @@ class Lexer(
   private def makeSymbol(): Token =
     val first = _cc.toString
     advance()
-    if _cc != 0 then
-      val maybeTwo = first + _cc
-      val maybeSymbol = SymbolType.values.find(st => {st.text() == maybeTwo})
-      if maybeSymbol.isDefined then
-        // Two-character symbol!
-        advance()
-        return new Token(maybeSymbol.get)
-      // else, fall through
-    val maybeSt = SymbolType.values.find(st => {st.text() == first})
-    maybeSt match
-      case Some(st) => new Token(st)
-      case None => fail(s"Bad symbol $first")
+    val maybeSymbol = SymbolType.values.find(st => {st.text() == first})
+    if maybeSymbol.isDefined then
+      return new Token(maybeSymbol.get)
+    val maybeKeyword = KeywordType.values.find(kt => {kt.text() == first})
+    if maybeKeyword.isDefined then
+      return new Token(maybeKeyword.get)
+    fail(s"Bad symbol $first")
 
   private def skipWhitespace() =
     var moreWhitespace = true
@@ -51,23 +46,14 @@ class Lexer(
 
   private def makeText(): Token =
     var soFar = StringBuilder()
-    val first = _cc.toLower
+    val first = _cc
     soFar += _cc
     advance()
-    if !_cc.isLetter then
-      // one letter
-      newVariable(soFar.toString, VarType.VarTypeInt)
-    else
-      while _cc.isLetter do
-        soFar += _cc
-        advance()
-      val maybeKeyword = soFar.head.toString.toUpperCase() + soFar.substring(1).toLowerCase()
-      try
-        val kw = KeywordType.valueOf(maybeKeyword)
-        new Token(kw)
-      catch
-        case iae: IllegalArgumentException => fail(s"Unrecognized keyword $soFar")
-
+    while _cc.isLetter do
+      soFar += _cc
+      advance()
+    // hm... don't love the "always an int"
+    newVariable(soFar.toString)
 
   private def makeNumber(): Token =
     var soFar = StringBuilder()
