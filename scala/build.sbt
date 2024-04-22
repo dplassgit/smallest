@@ -3,8 +3,8 @@ val scala3Version = "3.4.1"
 lazy val root = project
   .in(file("."))
   .settings(
-    name := "Scala 3 Project Template",
-    version := "0.1.0-SNAPSHOT",
+    name := "Smallest Possible self-hosted Language compiler",
+    version := "0.1.0",
 
     scalaVersion := scala3Version,
 

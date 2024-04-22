@@ -14,6 +14,7 @@ enum KeywordType(t: String):
   case Or extends KeywordType("|")
   case Input extends KeywordType("@")
   case ProcDef extends KeywordType("_")
+  case Length extends KeywordType("%")
   case NoKeyword extends KeywordType("")
   def text(): String = t
 
@@ -60,6 +61,7 @@ class Token(
 
   def isKeyword(kw: KeywordType) =
     _tokenType == TokenType.Keyword && _keyword == kw
+
   def isSymbol(st: SymbolType) =
     _tokenType == TokenType.Symbol && _symbol == st
 

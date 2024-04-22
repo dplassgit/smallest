@@ -93,7 +93,6 @@ class ParserTest extends munit.FunSuite:
   test("while") {
     val parser = new Parser("i=1 ~i<10 ( #i i=i+1 )")
     val code = parser.parse()
-    println(code)
     assert(code.contains("startWhile_1:"))
     assert(code.contains("  call printf"))
     assert(code.contains("  setl AL"))
@@ -118,7 +117,7 @@ class ParserTest extends munit.FunSuite:
     assert(code.contains("endif_2:") == false)
   }
 
-  test("if_else") {
+  test("if/else") {
     val parser = new Parser("? 1=2 ( $ 89 $ 101 $ 115 $ 10 ) : ( $ 110 $ 111 $ 10 )")
     val code = parser.parse()
     assert(code.contains("else_1:"))

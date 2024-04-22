@@ -9,9 +9,7 @@ class Parser(
   private val _lexer: Lexer,
   private val _code: ListBuffer[String] = ListBuffer(),
   private val _data: Set[String] = Set(),
-  // Map from value to name
-  private val _constants: Map[String, String] = Map(),
-  private val _floatConstants: Map[String, String] = Map(),
+  private var _symTab: SymTab = SymTab(), // global
 
   private val OPCODES: Map[SymbolType, List[String]] = Map(
     SymbolType.Plus -> List("add EAX, EBX"),
@@ -55,6 +53,8 @@ class Parser(
     _token.tokenType() match
       case TokenType.Keyword => startsWithKeyword()
       case TokenType.Variable => startsWithVariable()
+      // TODO: if starts with _, function declaration
+      // TODO: if starts with ., array declaration
       case _ => fail(s"Cannot parse $_token")
 
   private def startsWithVariable() =
@@ -71,6 +71,7 @@ class Parser(
     // will only add if it doesn't exist yet
     addData(name, exprType)
 
+    // TODO: look up if it is a local or global
     emit(s"mov [_$name], EAX")
 
   private def startsWithKeyword(): Unit =
@@ -83,10 +84,11 @@ class Parser(
   private def parseIf(): Unit =
     expectKeyword(KeywordType.If)
     val exprType = expr()
+    checkTypes(VarType.VarTypeInt, exprType)
     val elseLabel = nextLabel("else")
     val endifLabel = nextLabel("endif")
-    emit("cmp AL, 0x01")
-    emit(s"jne $elseLabel")
+    emit("cmp AL, 0x00")
+    emit(s"je $elseLabel")
 
     expectSymbol(SymbolType.OpenParen)
     while !_token.isSymbol(SymbolType.CloseParen) &&
@@ -116,20 +118,19 @@ class Parser(
     advance() // eat the keyword
 
     val exprType = expr()
+    checkTypes(VarType.VarTypeInt, exprType)
+    emit("sub RSP, 0x20")
     if isPrintChar then
       emit("mov CL, AL")
-      emit("sub RSP, 0x20")
       emit("extern putchar")
       emit("call putchar")
-      emit("add RSP, 0x20")
     else
       addData("INT_FMT: db '%d', 0")
       emit("mov RCX, INT_FMT")
       emit("mov EDX, EAX")
-      emit("sub RSP, 0x20")
       emit("extern printf")
       emit("call printf")
-      emit("add RSP, 0x20")
+    emit("add RSP, 0x20")
 
   private def parseWhile(): Unit =
     expectKeyword(KeywordType.While)
@@ -162,15 +163,14 @@ class Parser(
       emit("push RAX")
 
       val rightType = atom()
+      checkTypes(leftType, rightType)
       emit("pop RBX")
 
       val code = OPCODES.get(sym)
-      if code.isDefined then
-        for line <- code.get do
-          emit(line)
-        return VarType.VarTypeInt
-      else
-        fail(s"Cannot do $sym arithmetic on $leftType yet")
+      for line <- code.get do
+        emit(line)
+      // It can't be an array (?)
+      return VarType.VarTypeInt
 
     leftType
 
@@ -192,7 +192,9 @@ class Parser(
   private def atomVariable(varType: VarType): VarType =
     val name = _token.value()
     advance() // eat the token we just processed
+    // TODO: if (, it's a function call
     // TODO: if ., it's an array get
+    // TODO: look up if it is a local or global
     emit(s"mov EAX, [_$name]")
     VarType.VarTypeInt
 
