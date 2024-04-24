@@ -34,6 +34,14 @@ class LexerTest extends munit.FunSuite:
     assert(t.varType() == VarType.VarTypeInt)
   }
 
+  test("char constant") {
+    val lexer = new Lexer("'a")
+    val t = lexer.nextToken()
+    assert(t.tokenType() == TokenType.Constant)
+    assert(t.value() == "97")
+    assert(t.varType() == VarType.VarTypeInt)
+  }
+
   test("multidigit int constant") {
     val lexer = new Lexer("314")
     val t = lexer.nextToken()
@@ -53,28 +61,6 @@ class LexerTest extends munit.FunSuite:
     assert(t.value() == "628")
     assert(t.varType() == VarType.VarTypeInt)
   }
-
-  /*test("string constant") {
-    val lexer = new Lexer("\"hi\"")
-    val t = lexer.nextToken()
-    assert(t.tokenType() == TokenType.Constant)
-    assert(t.value() == "hi")
-    assert(t.varType() == VarType.VarTypeString)
-  }
-
-  test("multiline string") {
-    val lexer = new Lexer("\"hi\nthere\"")
-    val t = lexer.nextToken()
-    assert(t.tokenType() == TokenType.Constant)
-    assert(t.value() == "hi\nthere")
-    assert(t.varType() == VarType.VarTypeString)
-  }
-
-  test("unclosed string constant") {
-    val lexer = new Lexer("\"hi")
-    intercept[Exception]{lexer.nextToken()}
-  }
-  */
 
   test("comment between tokens") {
     val lexer = new Lexer("314 ;comment\n 628")

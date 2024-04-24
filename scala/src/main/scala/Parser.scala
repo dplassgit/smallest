@@ -9,7 +9,8 @@ class Parser(
   private val _lexer: Lexer,
   private val _code: ListBuffer[String] = ListBuffer(),
   private val _data: Set[String] = Set(),
-  private var _symTab: SymTab = SymTab(), // global
+  private var _symTab: SymTab = SymTab(),
+  private var _curProc: ProcSymbol = null,
 
   private val OPCODES: Map[SymbolType, List[String]] = Map(
     SymbolType.Plus -> List("add EAX, EBX"),
@@ -53,11 +54,51 @@ class Parser(
     _token.tokenType() match
       case TokenType.Keyword => startsWithKeyword()
       case TokenType.Variable => startsWithVariable()
-      // TODO: if starts with _, function declaration
-      // TODO: if starts with ., array declaration
+      case TokenType.Symbol => startsWithSymbol()
       case _ => fail(s"Cannot parse $_token")
 
-  private def startsWithVariable() =
+  private def startsWithSymbol(): Unit =
+    _token.symbolType() match
+      // if starts with _, function declaration
+      case SymbolType.ProcDef => defineProc()
+      // TODO: if starts with ., array declaration
+      // TODO: if starts with ^, return
+      case _ => fail(s"Cannot parse $_token")
+
+  private def defineProc(): Unit =
+    expectSymbol(SymbolType.ProcDef) // go past the _
+    if _token.tokenType() != TokenType.Variable then
+      fail(s"Expected proc name after _; was $_token")
+    val procName = _token.value()
+    advance()
+    val afterProc = nextLabel(s"after_$procName")
+    emit(s"jmp $afterProc")
+    emitLabel(s"_$procName")
+    emit("push RBP")
+    emit("mov RBP, RSP")
+    expectSymbol(SymbolType.OpenParen)
+    // TODO: get param names, declare proc
+    val retType = if procName(0) == 'a' then VarType.VarTypeArr else if procName(0) == 'v' then VarType.NoVarType else VarType.VarTypeInt
+    _curProc = _symTab.declareProc(procName, List(), retType)
+    _symTab = _symTab.spawn()
+
+    expectSymbol(SymbolType.CloseParen)
+
+    expectSymbol(SymbolType.OpenParen)
+    while !_token.isSymbol(SymbolType.CloseParen) &&
+          _token.tokenType() != TokenType.EndOfFile do
+      statement()
+    expectSymbol(SymbolType.CloseParen)
+
+    emitLabel(s"_exit_of_$procName")
+    emit("mov RSP, RBP")
+    emit("pop RBP")
+    emit("ret")
+    _symTab = _symTab.parent()
+    _curProc = null
+    emitLabel(afterProc)
+
+  private def startsWithVariable(): Unit =
     val name = _token.value()
     advance() // eat the variable
 

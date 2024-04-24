@@ -26,6 +26,14 @@ class ParserTest extends munit.FunSuite:
     assert(code.contains("  call putchar"))
   }
 
+  test("print char literal") {
+    val parser = new Parser("$ 'A")
+    val code = parser.parse()
+    assert(code.contains("  mov EAX, 65"))
+    assert(code.contains("  mov CL, AL"))
+    assert(code.contains("  call putchar"))
+  }
+
   test("assign int") {
     val parser = new Parser("i=314")
     val code = parser.parse()
@@ -118,11 +126,22 @@ class ParserTest extends munit.FunSuite:
   }
 
   test("if/else") {
-    val parser = new Parser("? 1=2 ( $ 89 $ 101 $ 115 $ 10 ) : ( $ 110 $ 111 $ 10 )")
+    val parser = new Parser("? 1=2 ( $'Y$'e$'s $ 10 ) : ( $'N$'o $ 10 )")
     val code = parser.parse()
     assert(code.contains("else_1:"))
     assert(code.contains("  jmp endif_2"))
     assert(code.contains("endif_2:"))
   }
+
+  test("declare void proc") {
+    // Starts with v, returns void.
+    val parser = new Parser("_ voo() (# 3)")
+    val code = parser.parse()
+    assert(code.contains("  jmp after_voo_1"))
+    assert(code.contains("_voo:"))
+    assert(code.contains("after_voo_1:"))
+    assert(code.contains("  ret"))
+  }
+
 
 end ParserTest

@@ -13,7 +13,6 @@ enum KeywordType(t: String):
   case And extends KeywordType("&")
   case Or extends KeywordType("|")
   case Input extends KeywordType("@")
-  case ProcDef extends KeywordType("_")
   case Length extends KeywordType("%")
   case NoKeyword extends KeywordType("")
   def text(): String = t
@@ -28,6 +27,7 @@ enum SymbolType(t: String):
   case Dot extends SymbolType(".")
   case OpenParen extends SymbolType("(")
   case CloseParen extends SymbolType(")")
+  case ProcDef extends SymbolType("_")
   case NoSymbol extends SymbolType("")
   def text(): String = t
 
@@ -68,8 +68,10 @@ class Token(
 end Token
 
 def newVariable(name: String): Token =
-  new Token(TokenType.Variable, name, 
-    _varType=if name(0) == 'a' then VarType.VarTypeArr else VarType.VarTypeInt
-    )
+  new Token(TokenType.Variable, name, _varType=inferType(name))
 def newConstant(value: String): Token =
     new Token(TokenType.Constant, value, _varType=VarType.VarTypeInt)
+
+def inferType(name: String): VarType = 
+    if name(0) == 'a' then VarType.VarTypeArr else VarType.VarTypeInt
+

@@ -1,4 +1,4 @@
-? 1<2 ( $ 89 $ 101 $ 115 $ 10 ) : ( $ 78 $ 111 $10 ) ; if 1<2 then {print Yes} else {print No} -- should print "Yes"
-? 2<1 ( $ 89 $ 101 $ 115 $ 10 ) : ( $ 78 $ 111 $10 ) ; if 2<1 then {print Yes} else {print No} -- should print "No"
-? 1=2 ( $ 89 $ 101 $ 115 $ 10 ) : ( $ 78 $ 111 $10 ) ; if 1==2 then {print Yes} else {print No} -- should print "No"
-? 1!2 ( $ 89 $ 101 $ 115 $ 10 ) : ( $ 78 $ 111 $10 ) ; if 1!=2 then {print Yes} else {print No} -- should print "Yes"
+? 1<2 ( $'Y$'e$'s $10 ) : ( $'N$'o $10 ) ; if 1<2 then {print Yes} else {print No} -- should print "Yes"
+? 2<1 ( $'Y$'e$'s $10 ) : ( $'N$'o $10 ) ; if 2<1 then {print Yes} else {print No} -- should print "No"
+? 1=2 ( $'Y$'e$'s $10 ) : ( $'N$'o $10 ) ; if 1==2 then {print Yes} else {print No} -- should print "No"
+? 1!2 ( $'Y$'e$'s $10 ) : ( $'N$'o $10 ) ; if 1!=2 then {print Yes} else {print No} -- should print "Yes"

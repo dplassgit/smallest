@@ -16,6 +16,8 @@ class Lexer(
       new Token(TokenType.EndOfFile)
     else if _cc.isDigit then
       makeNumber()
+    else if _cc == '\'' then
+      makeCharConstant()
     else if _cc.isLetter then
       makeText()
     else
@@ -63,6 +65,15 @@ class Lexer(
       advance()
     // Int constant
     return newConstant(soFar.toString)
+
+  private def makeCharConstant(): Token =
+    advance() // eat the tick
+    var asChar = _cc
+    // convert to int
+    var asInt = asChar.toInt
+    // Int constant
+    advance() // eat the character
+    return newConstant(s"$asInt")
 
   private def advance() =
     if _loc < _text.size then
