@@ -9,8 +9,9 @@ class Parser(
   private val _lexer: Lexer,
   private val _code: ListBuffer[String] = ListBuffer(),
   private val _data: Set[String] = Set(),
-  private var _symTab: SymTab = SymTab(),
-  private var _curProc: ProcSymbol = null,
+  private val _globalSymTab: SymTab = SymTab(),
+  private var _symTab: SymTab = null,
+  private var _currProc: ProcSymbol = null,
 
   private val OPCODES: Map[SymbolType, List[String]] = Map(
     SymbolType.Plus -> List("add EAX, EBX"),
@@ -27,9 +28,10 @@ class Parser(
 
   def this(program: String) =
     this(new Lexer(program))
+    _symTab = _globalSymTab
     advance()
 
-  def parse(): ListBuffer[String] =
+  def parse(): List[String] =
     emit0("; scala")
     emit0("global main")
     emit0("section .text")
@@ -41,7 +43,7 @@ class Parser(
       emit0("section .data")
       for entry <- _data do
         emit(entry)
-    _code
+    _code.toList
 
   private def advance(): Unit =
     _token = _lexer.nextToken()
@@ -62,7 +64,6 @@ class Parser(
       // if starts with _, function declaration
       case SymbolType.ProcDef => defineProc()
       // TODO: if starts with ., array declaration
-      // TODO: if starts with ^, return
       case _ => fail(s"Cannot parse $_token")
 
   private def defineProc(): Unit =
@@ -76,13 +77,22 @@ class Parser(
     emitLabel(s"_$procName")
     emit("push RBP")
     emit("mov RBP, RSP")
+    val placeholder = _code.length
+    emit("; place holder")
     expectSymbol(SymbolType.OpenParen)
-    // TODO: get param names, declare proc
-    val retType = if procName(0) == 'a' then VarType.VarTypeArr else if procName(0) == 'v' then VarType.NoVarType else VarType.VarTypeInt
-    _curProc = _symTab.declareProc(procName, List(), retType)
-    _symTab = _symTab.spawn()
 
+    // get param names
+    val paramNames = ListBuffer[String]()
+    while !_token.isSymbol(SymbolType.CloseParen) &&
+          _token.tokenType() != TokenType.EndOfFile do
+      if _token.tokenType() != TokenType.Variable then
+        fail(s"Unexpected token $_token in formal list")
+      paramNames.append(_token.value())
+      advance()
     expectSymbol(SymbolType.CloseParen)
+
+    _currProc = _symTab.declareProc(procName, paramNames.toList)
+    _symTab = _currProc.symTab()
 
     expectSymbol(SymbolType.OpenParen)
     while !_token.isSymbol(SymbolType.CloseParen) &&
@@ -90,12 +100,16 @@ class Parser(
       statement()
     expectSymbol(SymbolType.CloseParen)
 
-    emitLabel(s"_exit_of_$procName")
+    emitLabel(s"_return_from_$procName")
     emit("mov RSP, RBP")
     emit("pop RBP")
     emit("ret")
+    val locals = _currProc.symTab().numLocals()
+    if locals > 0 then
+      // 16?
+      _code(placeholder) = s"  sub RSP, ${locals*8}"
     _symTab = _symTab.parent()
-    _curProc = null
+    _currProc = null
     emitLabel(afterProc)
 
   private def startsWithVariable(): Unit =
@@ -103,24 +117,38 @@ class Parser(
     advance() // eat the variable
 
     // TODO: if ., it's an array assignment
-    // TODO: if (, it's a function call
+    // TODO: if (, it's a (void) function call
 
     expectSymbol(SymbolType.Eq)
 
     val exprType = expr()
 
     // will only add if it doesn't exist yet
-    addData(name, exprType)
+    val sym = _symTab.declareVar(name)
+    if sym.isGlobal() then
+      addData(name, exprType)
 
-    // TODO: look up if it is a local or global
-    emit(s"mov [_$name], EAX")
+    emit(s"mov ${sym.location()}, EAX  ; set $name")
 
   private def startsWithKeyword(): Unit =
     _token.keyword() match
       case KeywordType.PrintChar | KeywordType.PrintInt => parsePrint()
       case KeywordType.While => parseWhile()
       case KeywordType.If => parseIf()
+      // TODO: if starts with ^, return
+      case KeywordType.Return => parseReturn()
       case _ => fail(s"Cannot parse keyword $_token")
+
+  private def parseReturn(): Unit =
+    // 1. make sure it's in a proc
+    if _currProc == null then fail("Cannot return outside a proc")
+    expectKeyword(KeywordType.Return)
+    // 2. make sure it's the right type
+    if _currProc.retType() != VarType.NoVarType then
+      val exprType = expr()
+      checkTypes(_currProc.retType(), exprType)
+    val procName = _currProc.name()
+    emit(s"jmp _return_from_$procName")
 
   private def parseIf(): Unit =
     expectKeyword(KeywordType.If)
@@ -194,6 +222,12 @@ class Parser(
 
   // TODO: support the more complex expression syntax
   private def expr(): VarType =
+    if _token.isSymbol(SymbolType.OpenParen) then
+      expectSymbol(SymbolType.OpenParen)
+      val exprType = expr()
+      expectSymbol(SymbolType.CloseParen)
+      return exprType
+      
     val leftType = atom()
 
     if _token.tokenType() == TokenType.Symbol then
@@ -219,7 +253,7 @@ class Parser(
     val varType = _token.varType()
     _token.tokenType() match
       case TokenType.Constant => atomConstant(varType)
-      case TokenType.Variable => atomVariable(varType)
+      case TokenType.Variable => atomVariable()
       case _ => fail(s"Cannot parse atom $_token")
 
   private def atomConstant(varType: VarType): VarType =
@@ -230,14 +264,49 @@ class Parser(
     advance() // eat the token we just processed
     varType
 
-  private def atomVariable(varType: VarType): VarType =
+  private def atomVariable(): VarType =
     val name = _token.value()
+    val varType = _token.varType()
     advance() // eat the token we just processed
-    // TODO: if (, it's a function call
+
+    if _token.isSymbol(SymbolType.OpenParen) then
+      // if (, it's a function call
+
+      // look up procedure.
+      val procSym = _globalSymTab.lookupProc(name)
+      if procSym == None then fail(s"Cannot find proc $name")
+      val retType = procSym.get.varType()
+      if retType == VarType.NoVarType then fail(s"Cannot set to void function $name")
+
+      advance() // eat the (
+
+      // read and push params
+      var actual = 0
+      while !_token.isSymbol(SymbolType.CloseParen) && _token.tokenType() != TokenType.EndOfFile do
+        val paramType = expr()
+        actual += 1
+        emit(s"push RAX")
+      expectSymbol(SymbolType.CloseParen)
+      val expected = procSym.get.params().length
+      if actual != expected then
+        fail(s"Wrong # of params to $name: expected $expected, actual $actual")
+
+      // the return value will be in EAX
+      emit(s"call _$name")
+
+      // clean up stack
+      val bytes = actual * 8
+      if bytes > 0 then
+        emit(s"add RSP, $bytes  ; adjust stack for pushed params")
+
+      return retType
+
     // TODO: if ., it's an array get
-    // TODO: look up if it is a local or global
-    emit(s"mov EAX, [_$name]")
-    VarType.VarTypeInt
+    // look up if it is a param, local or global
+    val sym = _symTab.lookupVar(name)
+    if sym != None then emit(s"mov EAX, ${sym.get.location()}  ; get $name")
+    else fail(s"Variable $name not found")
+    varType
 
   private def expectSymbol(st: SymbolType) =
     if _token.tokenType() != TokenType.Symbol || _token.symbolType() != st then

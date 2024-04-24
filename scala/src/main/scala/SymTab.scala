@@ -1,5 +1,6 @@
 package com.plasstech.lang.smallest
 
+import scala.collection.mutable.ListBuffer
 import scala.collection.mutable.Map
 import scala.collection.mutable.Set
 
@@ -11,31 +12,100 @@ class SymTab(
 ):
   def this() = this(null)
 
+  def parent(): SymTab = _parent
   def isGlobal(): Boolean = _parent == null
+  def spawn(): SymTab = return new SymTab(this)
 
-  // Declare function
-  def declare(name: String, params: List[VarType], returnType: VarType): Unit =
-    if !isGlobal() then
-      fail("Cannot nest functions")
+  // Declare procedure
+  def declareProc(name: String, params: List[String]): ProcSymbol =
+    if !isGlobal() then fail("Cannot nest functions")
+    val retType = if name(0) == 'v' then VarType.NoVarType else inferType(name)
+    val child = spawn()
+    var i = params.length
+    for param <- params do
+      child.declareParam(param, (i+1) * 8)
+      i -= 1
+    val procSym = new ProcSymbol(name, retType, params, child)
+    _procEntries.put(name, procSym)
+    procSym
 
-  // Declare int variable
-  def declare(name: String): Unit = ()
+  override def toString: String = s"variables $_varEntries, procs $_procEntries"
 
-  // Declare array variable (?)
-  def declare(name: String, length: Int): Unit = ()
+  def declareParam(name: String, offset: Int): VarSymbol = 
+    val symbol = new VarSymbol(name, inferType(name), offset, VarSymbolType.Param)
+    _varEntries.put(name, symbol)
+    symbol
 
-  def lookupVar(name: String): VarSymbol = null
-  def lookupProc(name: String): ProcSymbol = null
+  def declareVar(name: String): VarSymbol = 
+    // look up first
+    val existing = lookupVar(name)
+    if existing != None then return existing.get
+
+    val varSymType = if isGlobal() then VarSymbolType.Global else VarSymbolType.Local
+    val offset = if isGlobal() then 0 else (numLocals() + 1) * 8
+    val symbol = new VarSymbol(name, inferType(name), offset, varSymType)
+    _varEntries.put(name, symbol)
+    symbol
+
+  def numLocals(): Int =
+    _varEntries.filter(v => v._2.isLocal()).size
+
+  def lookupVar(name: String): Option[VarSymbol] = 
+    val sym = _varEntries.get(name)
+    if sym != None then return sym
+    if !isGlobal() then return _parent.lookupVar(name)
+    return None
+
+  def lookupProc(name: String): Option[ProcSymbol] = _procEntries.get(name)
 
 end SymTab
 
-class Symbol(
-  private val _name: String = "",
-) :
+abstract class Symbol(
+  private val _name: String,
+  private val _varType: VarType,
+):
+  def name(): String = _name
+  def varType(): VarType = _varType
+
 end Symbol
 
-class VarSymbol extends Symbol
+
+enum VarSymbolType:
+  case Param, Local, Global
+
+class VarSymbol (
+  private val _name: String,
+  private val _varType: VarType,
+  private val _offset: Int,
+  private val _type: VarSymbolType,
+) extends Symbol(_name, _varType):
+
+  override def toString: String = 
+    s"varSymbol $_name ($_varType @ $_offset)"
+
+  def location(): String = 
+    _type match
+      case VarSymbolType.Local => s"[RBP-$_offset]"
+      case VarSymbolType.Param => s"[RBP+$_offset]"
+      case VarSymbolType.Global => s"[_$_name]"
+
+  def isLocal(): Boolean = _type == VarSymbolType.Local
+  def isParam(): Boolean = _type == VarSymbolType.Param
+  def isGlobal(): Boolean = _type == VarSymbolType.Global
 end VarSymbol
 
-class ProcSymbol extends Symbol
+class ProcSymbol (
+  private val _name: String,
+  private val _retType: VarType,
+  private val _params: List[String],
+  private val _symTab: SymTab,
+) extends Symbol(_name, _retType):
+
+  override def toString: String = 
+    s"procSymbol $_name($_params): $_retType"
+
+  def params(): List[String] = _params
+  def symTab(): SymTab = _symTab
+  def retType(): VarType = _retType
+
 end ProcSymbol
