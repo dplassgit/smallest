@@ -2,23 +2,39 @@
 
 "Smallest Possible Language" - a self-hosted compiler.
 
-## Keywords
 
-```
-$ print as character
-# print as integer
-~ while
-? : if/else
-^ return
-@ input
-_ define function
-; comment
-% array size
-```
+## Why!?
 
-## Symbols
+For fun. Design considerations:
 
-`+ - * ( ) . & | ! = <`
+* As simple as possible, but no simpler.
+* All keywords and symbols are single-character non-alphanumerics, to make the lexical analyzer easier. Some symbols (e.g., `>`) have been omitted. Just use `<` instead.
+* No strings, structs, floats, bytes, or bools.
+* The only two data types are ints (32-bits) and arrays of ints)
+ 
+## Symbols/Keywords
+
+`;` -  comment
+
+`$` - print as character
+
+`#` -  print as integer
+
+`~` -  while
+
+`? :` -  if/else
+
+`^` -  return
+
+`@` -  input
+
+`_` -  define function
+
+`%` - array size
+
+`'` - character constant (really just an int)
+
+And the usual math: `+ - * ( ) . & | ! = <`
 
 Note: `=` is used for both assignment and comparison. `!` is the "not equals" comparison.
 
@@ -32,8 +48,8 @@ The `.` symbol is for array declaration and reference.
 
 Variables that start with `a` are arrays of ints. All other variables are ints.
 
-Only alphabetic characters are allowed in a variable name. Variable and function
-names are case-sensitive.
+Only alphabetic characters are allowed in variable names. Variable and function
+names are *case-sensitive*.
 
 ## Arrays
 
@@ -69,7 +85,7 @@ arr.3 = 0
 ```
 
 ```
-? arr.i = 0 ( # 0 )
+? arr.i = 0 ( $'E $'m $'p $'t $'y $10 )  ; if arr[i] == 0 { println("Empty")}
 ```
 
 ### Size
@@ -90,19 +106,19 @@ All other functions return int.
 
 ### Declaration & call
 
-Factorial
+Factorial:
 
 ```
-_ fact(n) ( ; takes an int, returns an int
-  ? n < 2 ( ^ n)
-  ^ n * fact(n-1)
+_fact(n) ( ; takes an int, returns an int
+  ? n < 2 ( ^ n)  ; if n < 2 { return n}
+  ^ n * fact(n-1)  ; return n * fact(n-1)
 )
 ```
 
 Print an array as a string:
 
 ```
-_ printstring(as) (
+_printstring(as) (
   i=0
   ~ as.i ! 0 (   ; while as[i] != 0
     $ as.i       ; print as[i] as a character
