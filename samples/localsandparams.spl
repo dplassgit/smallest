@@ -1,0 +1,17 @@
+_fact(max) (
+  rv=1
+  i=1
+  max = max + 1
+  ~ (i < max) (
+    # i $'!$' $'= $'  
+    rv = rv * i
+    # rv
+    $10
+    i = i + 1
+  )
+  ^ rv
+)
+
+# fact(5)
+$10
+# fact(10)

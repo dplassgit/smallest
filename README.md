@@ -24,13 +24,13 @@ Note: `=` is used for both assignment and comparison. `!` is the "not equals" co
 
 There is no division or `>` or `>=` or `<=`.
 
-Blocks are separated with parentheses. 
+Blocks are separated with parentheses.
 
-The "dot" symbol is for array declaration and reference.
+The `.` symbol is for array declaration and reference.
 
 ## Variables
 
-Variables that start with 'a' are arrays of ints. All other variables are ints.
+Variables that start with `a` are arrays of ints. All other variables are ints.
 
 Only alphabetic characters are allowed in a variable name. Variable and function
 names are case-sensitive.
@@ -39,7 +39,7 @@ names are case-sensitive.
 
 ### Naming
 
-Variables that start with 'a' are arrays of ints. 
+Variables that start with `a` are arrays of ints.
 
 ### Declaration
 
@@ -47,7 +47,7 @@ Variables that start with 'a' are arrays of ints.
 .4 arr
 ```
 
-Allocates an array named `arr` of size 4. 
+Allocates an array named `arr` of size 4.
 
 Array sizes can be dynamic:
 
@@ -85,7 +85,7 @@ i = %a
 
 ### Naming
 
-Functions that start with 'v' are void. Functions that start with 'a' return an array. 
+Functions that start with `v` are void. Functions that start with `a` return an array.
 All other functions return int.
 
 ### Declaration & call
