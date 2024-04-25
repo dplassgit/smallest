@@ -16,6 +16,8 @@ class Parser(
   private val OPCODES: Map[SymbolType, List[String]] = Map(
     SymbolType.Plus -> List("add EAX, EBX"),
     SymbolType.Mult -> List("imul EAX, EBX"),
+    SymbolType.And -> List("and EAX, EBX"),
+    SymbolType.Or -> List("or EAX, EBX"),
     SymbolType.Minus -> List("xchg EAX, EBX", "sub EAX, EBX"),
     SymbolType.Eq -> List("cmp EBX, EAX", "setz AL"),
     SymbolType.Neq -> List("cmp EBX, EAX", "setnz AL"),
@@ -135,7 +137,6 @@ class Parser(
       case KeywordType.PrintChar | KeywordType.PrintInt => parsePrint()
       case KeywordType.While => parseWhile()
       case KeywordType.If => parseIf()
-      // TODO: if starts with ^, return
       case KeywordType.Return => parseReturn()
       case _ => fail(s"Cannot parse keyword $_token")
 
@@ -219,7 +220,6 @@ class Parser(
     emit(s"jmp $startWhileLabel")
     emitLabel(endWhileLabel)
 
-
   // TODO: support the more complex expression syntax
   private def expr(): VarType =
     if _token.isSymbol(SymbolType.OpenParen) then
@@ -289,7 +289,7 @@ class Parser(
       expectSymbol(SymbolType.CloseParen)
       val expected = procSym.get.params().length
       if actual != expected then
-        fail(s"Wrong # of params to $name: expected $expected, actual $actual")
+        fail(s"Wrong # of params to $name: expected $expected, saw $actual")
 
       // the return value will be in EAX
       emit(s"call _$name")
@@ -302,6 +302,7 @@ class Parser(
       return retType
 
     // TODO: if ., it's an array get
+
     // look up if it is a param, local or global
     val sym = _symTab.lookupVar(name)
     if sym != None then emit(s"mov EAX, ${sym.get.location()}  ; get $name")
@@ -309,13 +310,11 @@ class Parser(
     varType
 
   private def expectSymbol(st: SymbolType) =
-    if _token.tokenType() != TokenType.Symbol || _token.symbolType() != st then
-      fail(s"Expected $st, found $_token")
+    if !_token.isSymbol(st) then fail(s"Expected $st, saw $_token")
     advance()
 
   private def expectKeyword(kw: KeywordType) =
-    if _token.tokenType() != TokenType.Keyword || _token.keyword() != kw then
-      fail(s"Expected $kw, found $_token")
+    if !_token.isKeyword(kw) then fail(s"Expected $kw, saw $_token")
     advance()
 
   private def nextLabel(prefix: String): String =
@@ -324,7 +323,7 @@ class Parser(
 
   private def checkTypes(expected: VarType, actual: VarType) =
     if expected != actual then
-      fail(s"Type mismatch: expected $expected, found $actual")
+      fail(s"Type mismatch: expected $expected, saw $actual")
 
   private def addData(name: String, varType: VarType): Unit =
     varType match

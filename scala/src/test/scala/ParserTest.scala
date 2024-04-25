@@ -79,6 +79,22 @@ class ParserTest extends munit.FunSuite:
     assert(code.contains("  add EAX, EBX"))
   }
 
+  test("and constant ints") {
+    val parser = new Parser("i=314&1")
+    val code = decomment(parser.parse())
+    assert(code.contains("  mov EAX, 314"))
+    assert(code.contains("  mov EAX, 1"))
+    assert(code.contains("  and EAX, EBX"))
+  }
+
+  test("or constant ints") {
+    val parser = new Parser("i=314|1")
+    val code = decomment(parser.parse())
+    assert(code.contains("  mov EAX, 314"))
+    assert(code.contains("  mov EAX, 1"))
+    assert(code.contains("  or EAX, EBX"))
+  }
+
   test("add variable ints") {
     val parser = new Parser("i=314 j=2 k=i+j")
     val code = decomment(parser.parse())

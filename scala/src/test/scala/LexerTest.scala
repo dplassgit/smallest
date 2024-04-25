@@ -121,10 +121,11 @@ class LexerTest extends munit.FunSuite:
   }
 
   test("all symbols") {
-    val lexer = new Lexer("<=!*+-().")
+    val lexer = new Lexer("<=!*+-().&|")
     val expected = List(SymbolType.Lt, SymbolType.Eq,
       SymbolType.Neq, SymbolType.Mult, SymbolType.Plus, SymbolType.Minus,
-      SymbolType.OpenParen, SymbolType.CloseParen, SymbolType.Dot)
+      SymbolType.OpenParen, SymbolType.CloseParen, SymbolType.Dot,
+      SymbolType.And, SymbolType.Or)
 
     for st <- expected do
       val t = lexer.nextToken()
