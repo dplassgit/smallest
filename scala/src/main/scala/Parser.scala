@@ -119,7 +119,30 @@ class Parser(
 
   private def startsWithVariable(): Unit =
     val name = _token.value()
+    val varType = inferType(name)
     advance() // eat the variable
+
+    // will only add if it doesn't exist yet
+    val sym = _symTab.declareVar(name)
+    if sym.isGlobal() then
+      addData(name, varType)
+
+    if _token.isSymbol(SymbolType.Length) then
+      // array allocation
+      advance()
+      val lengthType = expr()
+      checkTypes(VarType.VarTypeInt, lengthType)
+      // eax has the length as an int;
+      // multiply by 8, allocate
+      emit("imul EAX, 8")
+      emit("mov ECX, EAX")
+      emit("mov EDX, 1")
+      emit("sub RSP, 0x20")
+      emit("extern calloc")
+      emit("call calloc")
+      emit("add RSP, 0x20")
+      emit(s"mov ${sym.location()}, RAX  ; set $name")
+      return
 
     // TODO: if ., it's an array assignment
     // TODO: if (, it's a (void) function call
@@ -127,13 +150,13 @@ class Parser(
     expectSymbol(SymbolType.Eq)
 
     val exprType = expr()
+    checkTypes(exprType, varType)
 
-    // will only add if it doesn't exist yet
-    val sym = _symTab.declareVar(name)
-    if sym.isGlobal() then
-      addData(name, exprType)
-
-    emit(s"mov ${sym.location()}, EAX  ; set $name")
+    varType match {
+      case VarType.VarTypeInt => emit(s"mov ${sym.location()}, EAX  ; set $name")
+      case VarType.VarTypeArr => emit(s"mov ${sym.location()}, RAX  ; set $name")
+      case _ => fail(s"Cannot set variable $name of type $varType")
+    }
 
   private def parseReturn(): Unit =
     // 1. make sure it's in a proc
@@ -222,12 +245,12 @@ class Parser(
       val exprType = expr()
       expectSymbol(SymbolType.CloseParen)
       return exprType
-      
+
     val leftType = atom()
 
     if _token.tokenType() == TokenType.Symbol then
       val sym = _token.symbolType()
-      if !OPCODES.contains(sym) then 
+      if !OPCODES.contains(sym) then
         return leftType
       advance()
       emit("push RAX")
@@ -300,7 +323,12 @@ class Parser(
 
     // look up if it is a param, local or global
     val sym = _symTab.lookupVar(name)
-    if sym != None then emit(s"mov EAX, ${sym.get.location()}  ; get $name")
+    if sym != None then
+      varType match {
+        case VarType.VarTypeInt => emit(s"mov EAX, ${sym.get.location()}  ; get $name")
+        case VarType.VarTypeArr => emit(s"mov RAX, ${sym.get.location()}  ; get $name")
+        case _ => fail(s"Cannot get variable $name of type $varType")
+      }
     else fail(s"Variable $name not found")
     varType
 
@@ -319,6 +347,7 @@ class Parser(
   private def addData(name: String, varType: VarType): Unit =
     varType match
       case VarType.VarTypeInt => addData(s"_$name: dd 0")
+      case VarType.VarTypeArr => addData(s"_$name: dq 0")
       case _ => fail(s"Cannot add data of type $varType")
 
   private def addData(entry: String): Unit =

@@ -42,6 +42,23 @@ class ParserTest extends munit.FunSuite:
     assert(code.contains("  _i: dd 0"))
   }
 
+  test("allocate array") {
+    val parser = new Parser("a%10")
+    val code = decomment(parser.parse())
+    assert(code.contains("  mov EAX, 10"))
+    assert(code.contains("  call calloc"))
+    assert(code.contains("  mov [_a], RAX"))
+    assert(code.contains("  _a: dq 0"))
+  }
+
+  test("allocate local array") {
+    val parser = new Parser("_v() (a%10)")
+    val code = decomment(parser.parse())
+    assert(code.contains("  mov EAX, 10"))
+    assert(code.contains("  call calloc"))
+    assert(code.contains("  mov [RBP-8], RAX"))
+  }
+
   test("assign int twice") {
     val parser = new Parser("i=314 i=315")
     val code = decomment(parser.parse())
@@ -236,6 +253,13 @@ class ParserTest extends munit.FunSuite:
     assert(code.contains("  mov [RBP-8], EAX"))
   }
 
+  test("assign local array") {
+    val parser = new Parser("_v() (a%3 ab=a)")
+    val code = decomment(parser.parse())
+    assert(code.contains("  mov RAX, [RBP-8]"))
+    assert(code.contains("  mov [RBP-16], RAX"))
+  }
+
   test("use local") {
     val parser = new Parser("_v() (b=3 #b)")
     val code = decomment(parser.parse())
@@ -254,10 +278,20 @@ class ParserTest extends munit.FunSuite:
     assert(code.contains("  _b: dd 0") == false)
   }
 
-  test("print param") {
+  test("read param") {
     val parser = new Parser("_v(p) (#p)")
     val code = decomment(parser.parse())
     assert(code.contains("  mov EAX, [RBP+16]"))
+  }
+
+  test("read array param") {
+    val parser = new Parser("_x(a) (aa=a ^3) ag%3 y=x(ag)")
+    var code = parser.parse()
+    code = decomment(code)
+    assert(code.contains("  mov RAX, [_ag]"))
+    assert(code.contains("  push RAX"))
+    assert(code.contains("  mov RAX, [RBP+16]")) // read variable
+    assert(code.contains("  mov [RBP-8], RAX"))
   }
 
   test("use param") {
