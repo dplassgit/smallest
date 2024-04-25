@@ -19,13 +19,3 @@ import scala.io.StdIn.readLine
 case class SplFailure(message: String) extends Exception(message)
 
 def fail(message: String) = throw new SplFailure(message)
-
-def printSomeTokens() =
-  var t = new Token(TokenType.EndOfFile)
-  println(t)
-  t = new Token(KeywordType.PrintChar)
-  println(t)
-  t = newVariable("a")
-  println(t)
-  t = new Token(SymbolType.Eq)
-  println(t)

@@ -29,9 +29,6 @@ class Lexer(
     val maybeSymbol = SymbolType.values.find(st => {st.text() == first})
     if maybeSymbol.isDefined then
       return new Token(maybeSymbol.get)
-    val maybeKeyword = KeywordType.values.find(kt => {kt.text() == first})
-    if maybeKeyword.isDefined then
-      return new Token(maybeKeyword.get)
     fail(s"Bad symbol $first")
 
   private def skipWhitespace() =

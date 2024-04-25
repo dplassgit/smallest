@@ -8,9 +8,9 @@ class TokenTest extends munit.FunSuite:
   }
 
   test("creating a keyword sets the token type") {
-    val t = new Token(KeywordType.PrintInt)
-    assert(t.tokenType() == TokenType.Keyword)
-    assert(t.keyword() == KeywordType.PrintInt)
+    val t = new Token(SymbolType.PrintInt)
+    assert(t.tokenType() == TokenType.Symbol)
+    assert(t.symbolType() == SymbolType.PrintInt)
   }
 
   test("creating a symbol sets the token type") {

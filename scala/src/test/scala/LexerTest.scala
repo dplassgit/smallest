@@ -87,50 +87,20 @@ class LexerTest extends munit.FunSuite:
   test("keyword") {
     val lexer = new Lexer("$")
     var t = lexer.nextToken()
-    assert(t.tokenType() == TokenType.Keyword)
-    assert(t.keyword() == KeywordType.PrintChar)
-  }
-
-  test("all keywords") {
-    // All keywords except "NoKeyword"
-    val allKeywords = KeywordType.values.filter(_ != KeywordType.NoKeyword)
-    val program = allKeywords.map(_.text()).mkString(" ")
-    val lexer = new Lexer(program)
-
-    for kw <- allKeywords do
-      val t = lexer.nextToken()
-      assert(t.tokenType() == TokenType.Keyword)
-      assert(t.keyword() == kw)
-
-    val t = lexer.nextToken()
-    assert(t.tokenType() == TokenType.EndOfFile)
-  }
-
-  test("all symbols separated by spaces") {
-    val allSymbols = SymbolType.values.filter(_ != SymbolType.NoSymbol)
-    val program = allSymbols.map(_.text()).mkString(" ")
-
-    val lexer = new Lexer(program)
-
-    for st <- allSymbols do
-      val t = lexer.nextToken()
-      assert(t.tokenType() == TokenType.Symbol)
-      assert(t.symbolType() == st)
-    val t = lexer.nextToken()
-    assert(t.tokenType() == TokenType.EndOfFile)
+    assert(t.tokenType() == TokenType.Symbol)
+    assert(t.symbolType() == SymbolType.PrintChar)
   }
 
   test("all symbols") {
-    val lexer = new Lexer("<=!*+-().&|")
-    val expected = List(SymbolType.Lt, SymbolType.Eq,
-      SymbolType.Neq, SymbolType.Mult, SymbolType.Plus, SymbolType.Minus,
-      SymbolType.OpenParen, SymbolType.CloseParen, SymbolType.Dot,
-      SymbolType.And, SymbolType.Or)
+    val allSymbols = SymbolType.values.filter(_ != SymbolType.NoSymbol)
+    val program = allSymbols.map(_.text()).mkString(" ")
+    val lexer = new Lexer(program)
 
-    for st <- expected do
+    for sym <- allSymbols do
       val t = lexer.nextToken()
       assert(t.tokenType() == TokenType.Symbol)
-      assert(t.symbolType() == st)
+      assert(t.symbolType() == sym)
+
     val t = lexer.nextToken()
     assert(t.tokenType() == TokenType.EndOfFile)
   }

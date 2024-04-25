@@ -56,7 +56,6 @@ class Parser(
 
   private def statement(): Unit =
     _token.tokenType() match
-      case TokenType.Keyword => startsWithKeyword()
       case TokenType.Variable => startsWithVariable()
       case TokenType.Symbol => startsWithSymbol()
       case _ => fail(s"Cannot parse $_token")
@@ -65,6 +64,10 @@ class Parser(
     _token.symbolType() match
       // if starts with _, function declaration
       case SymbolType.ProcDef => defineProc()
+      case SymbolType.PrintChar | SymbolType.PrintInt => parsePrint()
+      case SymbolType.While => parseWhile()
+      case SymbolType.If => parseIf()
+      case SymbolType.Return => parseReturn()
       // TODO: if starts with ., array declaration
       case _ => fail(s"Cannot parse $_token")
 
@@ -132,18 +135,10 @@ class Parser(
 
     emit(s"mov ${sym.location()}, EAX  ; set $name")
 
-  private def startsWithKeyword(): Unit =
-    _token.keyword() match
-      case KeywordType.PrintChar | KeywordType.PrintInt => parsePrint()
-      case KeywordType.While => parseWhile()
-      case KeywordType.If => parseIf()
-      case KeywordType.Return => parseReturn()
-      case _ => fail(s"Cannot parse keyword $_token")
-
   private def parseReturn(): Unit =
     // 1. make sure it's in a proc
     if _currProc == null then fail("Cannot return outside a proc")
-    expectKeyword(KeywordType.Return)
+    expectSymbol(SymbolType.Return)
     // 2. make sure it's the right type
     if _currProc.retType() != VarType.NoVarType then
       val exprType = expr()
@@ -152,7 +147,7 @@ class Parser(
     emit(s"jmp _return_from_$procName")
 
   private def parseIf(): Unit =
-    expectKeyword(KeywordType.If)
+    expectSymbol(SymbolType.If)
     val exprType = expr()
     checkTypes(VarType.VarTypeInt, exprType)
     val elseLabel = nextLabel("else")
@@ -166,7 +161,7 @@ class Parser(
       statement()
     expectSymbol(SymbolType.CloseParen)
 
-    val hasElse = _token.isKeyword(KeywordType.Else)
+    val hasElse = _token.isSymbol(SymbolType.Else)
     if hasElse then
       emit(s"jmp $endifLabel")
     emitLabel(elseLabel)
@@ -183,7 +178,7 @@ class Parser(
       emitLabel(endifLabel)
 
   private def parsePrint(): Unit =
-    val isPrintChar = _token.isKeyword(KeywordType.PrintChar)
+    val isPrintChar = _token.isSymbol(SymbolType.PrintChar)
 
     advance() // eat the keyword
 
@@ -203,7 +198,7 @@ class Parser(
     emit("add RSP, 0x20")
 
   private def parseWhile(): Unit =
-    expectKeyword(KeywordType.While)
+    expectSymbol(SymbolType.While)
     val startWhileLabel = nextLabel("startWhile")
     emitLabel(startWhileLabel)
     val stopType = expr()
@@ -311,10 +306,6 @@ class Parser(
 
   private def expectSymbol(st: SymbolType) =
     if !_token.isSymbol(st) then fail(s"Expected $st, saw $_token")
-    advance()
-
-  private def expectKeyword(kw: KeywordType) =
-    if !_token.isKeyword(kw) then fail(s"Expected $kw, saw $_token")
     advance()
 
   private def nextLabel(prefix: String): String =
