@@ -328,6 +328,19 @@ class ParserTest extends munit.FunSuite:
   test("array get") {
     val parser = new Parser("a%3 a[1]=2 #a[1]")
     val code = decomment(parser.parse())
+    assert(code.contains("  mov DWORD [RBX], EAX"))
+  }
+
+  test("call void") {
+    val parser = new Parser("_v(b) () v(3)")
+    val code = decomment(parser.parse())
+    assert(code.contains("  call _v"))
+  }
+
+  test("ignore return value") {
+    val parser = new Parser("_f(b) (#b) f(3)")
+    val code = decomment(parser.parse())
+    assert(code.contains("  call _f"))
   }
 end ParserTest
 

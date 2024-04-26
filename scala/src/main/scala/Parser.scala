@@ -68,7 +68,6 @@ class Parser(
       case SymbolType.While => parseWhile()
       case SymbolType.If => parseIf()
       case SymbolType.Return => parseReturn()
-      // TODO: if starts with ., array declaration
       case _ => fail(s"Cannot parse $_token")
 
   private def defineProc(): Unit =
@@ -186,11 +185,7 @@ class Parser(
     emit("mov DWORD [RBX], EAX  ; assign array location")
 
   private def voidProcCall(name: String): Unit =
-    val sym = _symTab.lookupProc(name)
-    if sym == None then
-      fail(s"Proc $name not found")
-    // TODO: finish
-    fail("voidProcCall not implemented")
+    procCall(name, true)
 
   private def parseReturn(): Unit =
     // 1. make sure it's in a proc
@@ -361,7 +356,7 @@ class Parser(
 
     if _token.tokenType() == TokenType.Symbol then
       _token.symbolType() match
-        case SymbolType.OpenParen => return procCall(name)
+        case SymbolType.OpenParen => return procCall(name, false)
         case SymbolType.OpenBracket => return arrayGet(name)
         case _ => {}
 
@@ -386,12 +381,13 @@ class Parser(
     emit(s"mov DWORD EAX, [RAX]  ; $name[index]")
     indexType
 
-  private def procCall(name: String): VarType =
+  private def procCall(name: String, allowVoid: Boolean): VarType =
     // look up procedure.
     val procSym = _globalSymTab.lookupProc(name)
     if procSym == None then fail(s"Proc $name not found")
     val retType = procSym.get.varType()
-    if retType == VarType.NoVarType then fail(s"Cannot assign to void function $name")
+    if !allowVoid && retType == VarType.NoVarType then 
+      fail(s"Cannot assign to void function $name")
 
     expectSymbol(SymbolType.OpenParen)
 

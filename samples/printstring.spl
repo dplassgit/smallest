@@ -1,0 +1,22 @@
+_printstr(amsg) (
+  i=0 ~(amsg[i]!0) ( $amsg[i] i=i+1 )
+  $10
+  ^0
+)
+
+aBADSYMBOL%11
+aBADSYMBOL[0]='B
+aBADSYMBOL[1]='a
+aBADSYMBOL[2]='d
+aBADSYMBOL[3]=' 
+aBADSYMBOL[4]='s
+aBADSYMBOL[5]='y
+aBADSYMBOL[6]='m
+aBADSYMBOL[7]='b
+aBADSYMBOL[8]='o
+aBADSYMBOL[9]='l
+aBADSYMBOL[10]=0
+
+x=printstr(aBADSYMBOL)
+
+

@@ -1,0 +1,17 @@
+_void(b) (
+  #b
+  $10
+)
+
+void(3)
+void('a)
+
+_foo(c) (
+  #c
+  $10
+  ^c+1
+)
+
+foo(4)
+c=foo('b)
+
