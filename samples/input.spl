@@ -1,4 +1,8 @@
 a@
 
-$'0 $'= $a[0]
+_vprintstr(amsg) (
+  i=0 ~(amsg[i]!0) ( $amsg[i] i=i+1 )
+)
+
+vprintstr(a)
 $10

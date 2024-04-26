@@ -136,23 +136,42 @@ class Parser(
 
   private def input(name: String): Unit =
     val sym = getVar(name)
-    checkTypes(VarType.VarTypeArr, sym.varType())
+    checkTypes(VarType.VarTypeArr, sym.varType(), name)
     expectSymbol(SymbolType.Input)
 
     emitExtern("_flushall")
-    emit("mov RDX, 1048576  ; allocate 1mb")
     emit("mov RCX, 1")
+    val onemb=1048576
+    emit(s"mov RDX, $onemb  ; allocate 1mb")
     emitExtern("calloc")
-    emit(s"mov ${sym.location()}, RAX")
+    emit("push RAX  ; location where stdin is written to")
 
-    // 3. _read up to 1mb
+    // 3. _read up to 256k of input
     emit("mov RCX, 0  ; 0=stdio")
     emit("mov RDX, RAX  ; destination")
-    emit("mov R8, 1048576  ; count")
+    emit(s"mov R8, $onemb  ; count")
     emitExtern("_read")
+    emit("push RAX  ; # bytes read")
 
-    // TODO: create a smaller buffer with just the right size, then copy to it,
-    // then free the original 1mb buffer.
+    // RAX is the # of bytes read
+    emit("imul EAX, 4") // actual bytes read
+    emit("inc EAX")
+    emit("mov EDX, EAX")
+    emit("mov RCX, 1")
+    emitExtern("calloc")
+    emit(s"mov ${sym.location()}, RAX  ; destination")
+
+    // "spread" them so they are 4 bytes each
+    emit("pop RDX ; # bytes read")
+    emit("pop RBX ; stdin is here")
+    val loopLabel = nextLabel("loop")
+    emitLabel(loopLabel)
+    emit("mov BYTE cl, [rbx] ; read a byte")
+    emit("mov BYTE [rax], cl ; write a byte")
+    emit("inc RBX  ; next byte in source")
+    emit("add RAX, 4   ; next dword in dest")
+    emit("dec RDX")
+    emit(s"jne $loopLabel")
 
   private def getVar(name: String): VarSymbol =
     // will only add if it doesn't exist yet
@@ -168,7 +187,7 @@ class Parser(
 
     val exprType = expr()
     val varType = sym.varType()
-    checkTypes(exprType, varType)
+    checkTypes(exprType, varType, name)
 
     varType match
       case VarType.VarTypeInt => emit(s"mov ${sym.location()}, EAX  ; set $name")
@@ -178,11 +197,11 @@ class Parser(
   private def allocateArray(name: String): Unit =
     val sym = getVar(name)
     val varType = sym.varType()
-    checkTypes(VarType.VarTypeArr, varType)
+    checkTypes(VarType.VarTypeArr, varType, name)
 
     advance()
     val lengthType = expr()
-    checkTypes(VarType.VarTypeInt, lengthType)
+    checkTypes(VarType.VarTypeInt, lengthType, s"array length of $name")
     // eax has the length as an int;
     // multiply by 4, allocate
     emit("imul EAX, 4")
@@ -195,17 +214,17 @@ class Parser(
     val sym = _symTab.lookupVar(name)
     if sym == None then
       fail(s"Array $name not declared yet")
-    checkTypes(VarType.VarTypeArr, sym.get.varType())
+    checkTypes(VarType.VarTypeArr, sym.get.varType(), name)
     expectSymbol(SymbolType.OpenBracket)
     val indexExprType = expr()
     expectSymbol(SymbolType.CloseBracket)
-    checkTypes(VarType.VarTypeInt, indexExprType)
+    checkTypes(VarType.VarTypeInt, indexExprType, s"array index to $name")
     emit("imul EAX, 4  ; from index to offset")
     emit(s"add RAX, ${sym.get.location()}  ; absolute location")
     emit("push RAX  ; array location")
     expectSymbol(SymbolType.Eq)
     val exprType = expr()
-    checkTypes(VarType.VarTypeInt, exprType)
+    checkTypes(VarType.VarTypeInt, exprType, s"assignment to $name")
     emit("pop RBX")
     emit("mov DWORD [RBX], EAX  ; assign array location")
 
@@ -217,16 +236,16 @@ class Parser(
     if _currProc == null then fail("Cannot return outside a proc")
     expectSymbol(SymbolType.Return)
     // 2. make sure it's the right type
+    val procName = _currProc.name()
     if _currProc.retType() != VarType.NoVarType then
       val exprType = expr()
-      checkTypes(_currProc.retType(), exprType)
-    val procName = _currProc.name()
+      checkTypes(_currProc.retType(), exprType, s"return type of $procName")
     emit(s"jmp _return_from_$procName")
 
   private def parseIf(): Unit =
     expectSymbol(SymbolType.If)
     val exprType = expr()
-    checkTypes(VarType.VarTypeInt, exprType)
+    checkTypes(VarType.VarTypeInt, exprType, "if expression")
     val elseLabel = nextLabel("else")
     val endifLabel = nextLabel("endif")
     emit("cmp AL, 0x00")
@@ -260,7 +279,7 @@ class Parser(
     advance() // eat the keyword
 
     val exprType = expr()
-    checkTypes(VarType.VarTypeInt, exprType)
+    checkTypes(VarType.VarTypeInt, exprType, "print expression")
     emit("sub RSP, 0x20")
     if isPrintChar then
       emit("mov CL, AL")
@@ -279,7 +298,7 @@ class Parser(
     val startWhileLabel = nextLabel("startWhile")
     emitLabel(startWhileLabel)
     val stopType = expr()
-    checkTypes(VarType.VarTypeInt, stopType)
+    checkTypes(VarType.VarTypeInt, stopType, "while expression")
     val endWhileLabel = nextLabel("endWhile")
     emit(s"cmp AL, 0x00") // anything but 0 is true
     emit(s"je $endWhileLabel")
@@ -295,7 +314,7 @@ class Parser(
   private def expr(): VarType = boolOr()
 
   private def rhs(leftType: VarType, rightType: VarType, op: SymbolType): Unit =
-    checkTypes(leftType, rightType)
+    checkTypes(leftType, rightType, s"operand to $op")
     emit("pop RBX")
     val opcode = OPCODES.get(op)
     for line <- opcode.get do
@@ -338,7 +357,7 @@ class Parser(
       advance()
       emit("push RAX")
       val rightType = mult()
-      checkTypes(leftType, rightType)
+      checkTypes(leftType, rightType, s"operand to $op")
       rhs(leftType, rightType, op)
     leftType
 
@@ -396,11 +415,11 @@ class Parser(
   private def arrayGet(name: String): VarType =
     val sym = _symTab.lookupVar(name)
     if sym == None then fail(s"Variable $name not found")
-    checkTypes(VarType.VarTypeArr, sym.get.varType())
+    checkTypes(VarType.VarTypeArr, sym.get.varType(), name)
     expectSymbol(SymbolType.OpenBracket)
     var indexType = expr()
     expectSymbol(SymbolType.CloseBracket)
-    checkTypes(VarType.VarTypeInt, indexType)
+    checkTypes(VarType.VarTypeInt, indexType, "array index")
     emit("imul EAX, 4  ; from index to offset")
     emit(s"add RAX, ${sym.get.location()}  ; absolute location")
     emit(s"mov DWORD EAX, [RAX]  ; $name[index]")
@@ -444,9 +463,9 @@ class Parser(
     _id += 1
     s"${prefix}_$_id"
 
-  private def checkTypes(expected: VarType, actual: VarType) =
+  private def checkTypes(expected: VarType, actual: VarType, thing: String) =
     if expected != actual then
-      fail(s"Type mismatch: expected $expected, saw $actual")
+      fail(s"Type mismatch: $thing expected to be $expected, was $actual")
 
   private def addData(name: String, varType: VarType): Unit =
     varType match
