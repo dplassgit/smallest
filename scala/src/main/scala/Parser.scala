@@ -125,18 +125,49 @@ class Parser(
       case SymbolType.Length => allocateArray(name)
       case SymbolType.OpenBracket => arrayAssignment(name)
       case SymbolType.OpenParen => voidProcCall(name)
+      case SymbolType.Input => input(name)
       case _ => {}
 
-  private def varAssignment(name: String): Unit =
+  private def emitExtern(name: String): Unit =
+    emit(s"extern $name")
+    emit("sub RSP, 0x20")
+    emit(s"call $name")
+    emit("add RSP, 0x20")
+
+  private def input(name: String): Unit =
+    val sym = getVar(name)
+    checkTypes(VarType.VarTypeArr, sym.varType())
+    expectSymbol(SymbolType.Input)
+
+    emitExtern("_flushall")
+    emit("mov RDX, 1048576  ; allocate 1mb")
+    emit("mov RCX, 1")
+    emitExtern("calloc")
+    emit(s"mov ${sym.location()}, RAX")
+
+    // 3. _read up to 1mb
+    emit("mov RCX, 0  ; 0=stdio")
+    emit("mov RDX, RAX  ; destination")
+    emit("mov R8, 1048576  ; count")
+    emitExtern("_read")
+
+    // TODO: create a smaller buffer with just the right size, then copy to it,
+    // then free the original 1mb buffer.
+
+  private def getVar(name: String): VarSymbol =
     // will only add if it doesn't exist yet
     val sym = _symTab.declareVar(name)
-    val varType = inferType(name)
     if sym.isGlobal() then
-      addData(name, varType)
+      addData(name, sym.varType())
+    sym
+
+  private def varAssignment(name: String): Unit =
+    val sym = getVar(name)
 
     expectSymbol(SymbolType.Eq)
 
     val exprType = expr()
+    val varType = sym.varType()
     checkTypes(exprType, varType)
 
     varType match
@@ -145,12 +176,9 @@ class Parser(
       case _ => fail(s"Cannot set variable $name of type $varType")
 
   private def allocateArray(name: String): Unit =
-    // will only add if it doesn't exist yet
-    val sym = _symTab.declareVar(name)
-    val varType = inferType(name)
+    val sym = getVar(name)
+    val varType = sym.varType()
     checkTypes(VarType.VarTypeArr, varType)
-    if sym.isGlobal() then
-      addData(name, varType)
 
     advance()
     val lengthType = expr()
@@ -160,10 +188,7 @@ class Parser(
     emit("imul EAX, 4")
     emit("mov ECX, EAX")
     emit("mov EDX, 1")
-    emit("sub RSP, 0x20")
-    emit("extern calloc")
-    emit("call calloc")
-    emit("add RSP, 0x20")
+    emitExtern("calloc")
     emit(s"mov ${sym.location()}, RAX  ; set ${sym.name()}")
 
   private def arrayAssignment(name: String): Unit =
@@ -386,7 +411,7 @@ class Parser(
     val procSym = _globalSymTab.lookupProc(name)
     if procSym == None then fail(s"Proc $name not found")
     val retType = procSym.get.varType()
-    if !allowVoid && retType == VarType.NoVarType then 
+    if !allowVoid && retType == VarType.NoVarType then
       fail(s"Cannot assign to void function $name")
 
     expectSymbol(SymbolType.OpenParen)

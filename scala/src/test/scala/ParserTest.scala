@@ -342,6 +342,15 @@ class ParserTest extends munit.FunSuite:
     val code = decomment(parser.parse())
     assert(code.contains("  call _f"))
   }
+
+  test("input") {
+    val parser = new Parser("a@")
+    val code = decomment(parser.parse())
+    assert(code.contains("  mov [_a], RAX"))
+    assert(code.contains("  call _read"))
+    assert(code.contains("  _a: dq 0"))
+  }
+
 end ParserTest
 
 
