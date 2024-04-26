@@ -84,10 +84,13 @@ class VarSymbol (
     s"varSymbol $_name ($_varType @ $_offset)"
 
   def location(): String = 
+    s"[${address()}]"
+
+  def address(): String = 
     _type match
-      case VarSymbolType.Local => s"[RBP-$_offset]"
-      case VarSymbolType.Param => s"[RBP+$_offset]"
-      case VarSymbolType.Global => s"[_$_name]"
+      case VarSymbolType.Local => s"RBP-$_offset"
+      case VarSymbolType.Param => s"RBP+$_offset"
+      case VarSymbolType.Global => s"_$_name"
 
   def isLocal(): Boolean = _type == VarSymbolType.Local
   def isParam(): Boolean = _type == VarSymbolType.Param

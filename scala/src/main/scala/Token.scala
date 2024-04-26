@@ -18,11 +18,12 @@ enum SymbolType(t: String):
   case Eq extends SymbolType("=")
   case Neq extends SymbolType("!")
   case Lt extends SymbolType("<")
-  case Dot extends SymbolType(".")
   case And extends SymbolType("&")
   case Or extends SymbolType("|")
   case OpenParen extends SymbolType("(")
   case CloseParen extends SymbolType(")")
+  case OpenBracket extends SymbolType("[")
+  case CloseBracket extends SymbolType("]")
   case ProcDef extends SymbolType("_")
   case NoSymbol extends SymbolType("")
   def text(): String = t

@@ -119,33 +119,22 @@ class Parser(
 
   private def startsWithVariable(): Unit =
     val name = _token.value()
-    val varType = inferType(name)
     advance() // eat the variable
 
+    _token.symbolType() match {
+      case SymbolType.Eq => varAssignment(name)
+      case SymbolType.Length => allocateArray(name)
+      case SymbolType.OpenBracket => arrayAssignment(name)
+      case SymbolType.OpenParen => voidProcCall(name)
+      case _ => {}
+    }
+
+  private def varAssignment(name: String): Unit =
     // will only add if it doesn't exist yet
     val sym = _symTab.declareVar(name)
+    val varType = inferType(name)
     if sym.isGlobal() then
       addData(name, varType)
-
-    if _token.isSymbol(SymbolType.Length) then
-      // array allocation
-      advance()
-      val lengthType = expr()
-      checkTypes(VarType.VarTypeInt, lengthType)
-      // eax has the length as an int;
-      // multiply by 8, allocate
-      emit("imul EAX, 8")
-      emit("mov ECX, EAX")
-      emit("mov EDX, 1")
-      emit("sub RSP, 0x20")
-      emit("extern calloc")
-      emit("call calloc")
-      emit("add RSP, 0x20")
-      emit(s"mov ${sym.location()}, RAX  ; set $name")
-      return
-
-    // TODO: if ., it's an array assignment
-    // TODO: if (, it's a (void) function call
 
     expectSymbol(SymbolType.Eq)
 
@@ -157,6 +146,53 @@ class Parser(
       case VarType.VarTypeArr => emit(s"mov ${sym.location()}, RAX  ; set $name")
       case _ => fail(s"Cannot set variable $name of type $varType")
     }
+
+  private def allocateArray(name: String): Unit =
+    // will only add if it doesn't exist yet
+    val sym = _symTab.declareVar(name)
+    val varType = inferType(name)
+    checkTypes(VarType.VarTypeArr, varType)
+    if sym.isGlobal() then
+      addData(name, varType)
+
+    advance()
+    val lengthType = expr()
+    checkTypes(VarType.VarTypeInt, lengthType)
+    // eax has the length as an int;
+    // multiply by 4, allocate
+    emit("imul EAX, 4")
+    emit("mov ECX, EAX")
+    emit("mov EDX, 1")
+    emit("sub RSP, 0x20")
+    emit("extern calloc")
+    emit("call calloc")
+    emit("add RSP, 0x20")
+    emit(s"mov ${sym.location()}, RAX  ; set ${sym.name()}")
+
+  private def arrayAssignment(name: String): Unit =
+    val sym = _symTab.lookupVar(name)
+    if sym == None then
+      fail(s"Array $name not declared yet")
+    checkTypes(VarType.VarTypeArr, sym.get.varType())
+    expectSymbol(SymbolType.OpenBracket)
+    val indexExprType = expr()
+    expectSymbol(SymbolType.CloseBracket)
+    checkTypes(VarType.VarTypeInt, indexExprType)
+    emit("imul EAX, 4  ; from index to offset")
+    emit(s"add RAX, ${sym.get.location()}  ; absolute location")
+    emit("push RAX  ; array location")
+    expectSymbol(SymbolType.Eq)
+    val exprType = expr()
+    checkTypes(VarType.VarTypeInt, exprType)
+    emit("pop RBX")
+    emit("mov DWORD [RBX], EAX  ; assign array location")
+
+  private def voidProcCall(name: String): Unit =
+    val sym = _symTab.lookupProc(name)
+    if sym == None then
+      fail(s"Proc $name not found")
+    // TODO: finish
+    fail("voidProcCall not implemented")
 
   private def parseReturn(): Unit =
     // 1. make sure it's in a proc
@@ -190,7 +226,7 @@ class Parser(
     emitLabel(elseLabel)
 
     if hasElse then
-      advance() // eat the else
+      expectSymbol(SymbolType.Else)
       expectSymbol(SymbolType.OpenParen)
       while !_token.isSymbol(SymbolType.CloseParen) &&
           _token.tokenType() != TokenType.EndOfFile do
@@ -287,50 +323,63 @@ class Parser(
     val varType = _token.varType()
     advance() // eat the token we just processed
 
-    if _token.isSymbol(SymbolType.OpenParen) then
-      // if (, it's a function call
-
-      // look up procedure.
-      val procSym = _globalSymTab.lookupProc(name)
-      if procSym == None then fail(s"Cannot find proc $name")
-      val retType = procSym.get.varType()
-      if retType == VarType.NoVarType then fail(s"Cannot set to void function $name")
-
-      advance() // eat the (
-
-      // read and push params
-      var actual = 0
-      while !_token.isSymbol(SymbolType.CloseParen) && _token.tokenType() != TokenType.EndOfFile do
-        val paramType = expr()
-        actual += 1
-        emit(s"push RAX")
-      expectSymbol(SymbolType.CloseParen)
-      val expected = procSym.get.params().length
-      if actual != expected then
-        fail(s"Wrong # of params to $name: expected $expected, saw $actual")
-
-      // the return value will be in EAX
-      emit(s"call _$name")
-
-      // clean up stack
-      val bytes = actual * 8
-      if bytes > 0 then
-        emit(s"add RSP, $bytes  ; adjust stack for pushed params")
-
-      return retType
-
-    // TODO: if ., it's an array get
-
-    // look up if it is a param, local or global
-    val sym = _symTab.lookupVar(name)
-    if sym != None then
-      varType match {
-        case VarType.VarTypeInt => emit(s"mov EAX, ${sym.get.location()}  ; get $name")
-        case VarType.VarTypeArr => emit(s"mov RAX, ${sym.get.location()}  ; get $name")
-        case _ => fail(s"Cannot get variable $name of type $varType")
+    if _token.tokenType() == TokenType.Symbol then
+      _token.symbolType() match {
+        case SymbolType.OpenParen => return procCall(name)
+        case SymbolType.OpenBracket => return arrayGet(name)
+        case _ => {}
       }
-    else fail(s"Variable $name not found")
+
+    val sym = _symTab.lookupVar(name)
+    if sym == None then fail(s"Variable $name not found")
+    varType match {
+      case VarType.VarTypeInt => emit(s"mov EAX, ${sym.get.location()}  ; get $name")
+      case VarType.VarTypeArr => emit(s"mov RAX, ${sym.get.location()}  ; get $name")
+      case _ => fail(s"Cannot get variable $name of type $varType")
+    }
     varType
+
+  private def arrayGet(name: String): VarType =
+    val sym = _symTab.lookupVar(name)
+    if sym == None then fail(s"Variable $name not found")
+    checkTypes(VarType.VarTypeArr, sym.get.varType())
+    expectSymbol(SymbolType.OpenBracket)
+    var indexType = expr()
+    expectSymbol(SymbolType.CloseBracket)
+    checkTypes(VarType.VarTypeInt, indexType)
+    emit("imul EAX, 4  ; from index to offset")
+    emit(s"add RAX, ${sym.get.location()}  ; absolute location")
+    emit(s"mov DWORD EAX, [RAX]  ; $name[index]")
+    indexType
+
+  private def procCall(name: String): VarType =
+    // look up procedure.
+    val procSym = _globalSymTab.lookupProc(name)
+    if procSym == None then fail(s"Proc $name not found")
+    val retType = procSym.get.varType()
+    if retType == VarType.NoVarType then fail(s"Cannot assign to void function $name")
+
+    expectSymbol(SymbolType.OpenParen)
+
+    // read and push params
+    var actual = 0
+    while !_token.isSymbol(SymbolType.CloseParen) && _token.tokenType() != TokenType.EndOfFile do
+      val paramType = expr()
+      actual += 1
+      emit(s"push RAX")
+    expectSymbol(SymbolType.CloseParen)
+    val expected = procSym.get.params().length
+    if actual != expected then
+      fail(s"Wrong # of params to $name: expected $expected, saw $actual")
+
+    // the return value will be in EAX
+    emit(s"call _$name")
+
+    // clean up stack
+    if actual > 0 then
+      emit(s"add RSP, ${actual*8}  ; adjust stack for pushed params")
+
+    retType
 
   private def expectSymbol(st: SymbolType) =
     if !_token.isSymbol(st) then fail(s"Expected $st, saw $_token")

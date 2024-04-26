@@ -14,27 +14,27 @@ For fun. Design considerations:
  
 ## Symbols/Keywords
 
-`;` -  comment
+`;` - comment
 
 `$` - print as character
 
-`#` -  print as integer
+`#` - print as integer
 
-`~` -  while
+`~` - while
 
-`? :` -  if/else
+`? :` - if/else
 
-`^` -  return
+`^` - return
 
-`@` -  input
+`@` - input
 
-`_` -  define function
+`_` - define function
 
-`%` - array size
+`%` - define  array size
 
 `'` - character constant (really just an int)
 
-And the usual math: `+ - * ( ) . & | ! = <`
+And the usual math: `+ - * ( ) [ ] & | ! = <`
 
 Note: `=` is used for both assignment and comparison. `!` is the "not equals" comparison.
 
@@ -42,7 +42,6 @@ There is no division or `>` or `>=` or `<=`.
 
 Blocks are separated with parentheses.
 
-The `.` symbol is for array declaration and reference.
 
 ## Variables
 
@@ -60,7 +59,7 @@ Variables that start with `a` are arrays of ints.
 ### Declaration
 
 ```
-.4 arr
+arr%4
 ```
 
 Allocates an array named `arr` of size 4.
@@ -68,34 +67,23 @@ Allocates an array named `arr` of size 4.
 Array sizes can be dynamic:
 
 ```
-.i+3 arr
+arr%(i+3)
 ```
 
 Allocates an array of size `i+3`.
 
 ### Indexing
 
-Use the dot symbol to set or reference an index into an array:
-
 ```
-arr.0 = 34
-arr.1 = 65
-arr.2 = 34
-arr.3 = 0
+arr[0] = 34
+arr[1] = 65
+arr[2] = 34
+arr[3] = 0
 ```
 
 ```
-? arr.i = 0 ( $'E $'m $'p $'t $'y $10 )  ; if arr[i] == 0 { println("Empty")}
+? arr[i] = 0 ( $'E $'m $'p $'t $'y $10 )  ; if arr[i] == 0 { println("Empty")}
 ```
-
-### Size
-
-Use the % prefix operator to get the size of an array.
-
-```
-i = %a
-```
-
 
 ## Functions
 
@@ -118,10 +106,10 @@ _fact(n) ( ; takes an int, returns an int
 Print an array as a string:
 
 ```
-_printstring(as) (
+_vprint(as) (
   i=0
-  ~ as.i ! 0 (   ; while as[i] != 0
-    $ as.i       ; print as[i] as a character
+  ~ as[i] ! 0 (   ; while as[i] != 0
+    $ as[i]       ; print as[i] as a character
     i=i+1
   )
 )

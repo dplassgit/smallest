@@ -46,9 +46,19 @@ class ParserTest extends munit.FunSuite:
     val parser = new Parser("a%10")
     val code = decomment(parser.parse())
     assert(code.contains("  mov EAX, 10"))
+    assert(code.contains("  imul EAX, 4"))
     assert(code.contains("  call calloc"))
     assert(code.contains("  mov [_a], RAX"))
     assert(code.contains("  _a: dq 0"))
+  }
+
+  test("allocate variable array") {
+    val parser = new Parser("i=3 a%(i+1)")
+    val code = decomment(parser.parse())
+    assert(code.contains("  mov EAX, [_i]"))
+    assert(code.contains("  imul EAX, 4"))
+    assert(code.contains("  call calloc"))
+    assert(code.contains("  mov [_a], RAX"))
   }
 
   test("allocate local array") {
@@ -300,6 +310,19 @@ class ParserTest extends munit.FunSuite:
     assert(code.contains("  mov [RBP-8], EAX")) // write c
     assert(code.contains("  mov EAX, [RBP+16]")) // read b
     assert(code.contains("  mov EAX, [RBP-8]")) // read c
+  }
+
+  test("array assignment") {
+    val parser = new Parser("a%3 a[1]=2")
+    val code = decomment(parser.parse())
+    assert(code.contains("  imul EAX, 4"))
+    assert(code.contains("  add RAX, [_a]"))
+    assert(code.contains("  mov DWORD [RBX], EAX"))
+  }
+
+  test("array get") {
+    val parser = new Parser("a%3 a[1]=2 #a[1]")
+    val code = decomment(parser.parse())
   }
 end ParserTest
 
