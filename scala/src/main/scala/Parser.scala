@@ -121,13 +121,12 @@ class Parser(
     val name = _token.value()
     advance() // eat the variable
 
-    _token.symbolType() match {
+    _token.symbolType() match
       case SymbolType.Eq => varAssignment(name)
       case SymbolType.Length => allocateArray(name)
       case SymbolType.OpenBracket => arrayAssignment(name)
       case SymbolType.OpenParen => voidProcCall(name)
       case _ => {}
-    }
 
   private def varAssignment(name: String): Unit =
     // will only add if it doesn't exist yet
@@ -141,11 +140,10 @@ class Parser(
     val exprType = expr()
     checkTypes(exprType, varType)
 
-    varType match {
+    varType match
       case VarType.VarTypeInt => emit(s"mov ${sym.location()}, EAX  ; set $name")
       case VarType.VarTypeArr => emit(s"mov ${sym.location()}, RAX  ; set $name")
       case _ => fail(s"Cannot set variable $name of type $varType")
-    }
 
   private def allocateArray(name: String): Unit =
     // will only add if it doesn't exist yet
@@ -274,41 +272,79 @@ class Parser(
     emit(s"jmp $startWhileLabel")
     emitLabel(endWhileLabel)
 
-  // TODO: support the more complex expression syntax
-  private def expr(): VarType =
-    if _token.isSymbol(SymbolType.OpenParen) then
-      expectSymbol(SymbolType.OpenParen)
-      val exprType = expr()
-      expectSymbol(SymbolType.CloseParen)
-      return exprType
+  private def expr(): VarType = boolOr()
 
-    val leftType = atom()
+  private def rhs(leftType: VarType, rightType: VarType, op: SymbolType): Unit =
+    checkTypes(leftType, rightType)
+    emit("pop RBX")
+    val opcode = OPCODES.get(op)
+    for line <- opcode.get do
+      emit(line)
 
-    if _token.tokenType() == TokenType.Symbol then
-      val sym = _token.symbolType()
-      if !OPCODES.contains(sym) then
-        return leftType
+  private def boolOr(): VarType =
+    val leftType = boolAnd()
+    while _token.isSymbol(SymbolType.Or) do
+      val op = _token.symbolType()
       advance()
       emit("push RAX")
+      val rightType = boolAnd()
+      rhs(leftType, rightType, op)
+    leftType
 
-      val rightType = atom()
+  private def boolAnd(): VarType =
+    val leftType = compare()
+    while _token.isSymbol(SymbolType.And) do
+      val op = _token.symbolType()
+      advance()
+      emit("push RAX")
+      val rightType = compare()
+      rhs(leftType, rightType, op)
+    leftType
+
+  private def compare(): VarType =
+    val leftType = addSub()
+    while _token.isSymbol(SymbolType.Eq) || _token.isSymbol(SymbolType.Neq) || _token.isSymbol(SymbolType.Lt) do
+      val op = _token.symbolType()
+      advance()
+      emit("push RAX")
+      val rightType = addSub()
+      rhs(leftType, rightType, op)
+    leftType
+
+  private def addSub(): VarType =
+    val leftType = mult()
+    while _token.isSymbol(SymbolType.Plus) || _token.isSymbol(SymbolType.Minus) do
+      val op = _token.symbolType()
+      advance()
+      emit("push RAX")
+      val rightType = mult()
       checkTypes(leftType, rightType)
-      emit("pop RBX")
+      rhs(leftType, rightType, op)
+    leftType
 
-      val code = OPCODES.get(sym)
-      for line <- code.get do
-        emit(line)
-      // It can't be an array (?)
-      return VarType.VarTypeInt
-
+  private def mult(): VarType =
+    val leftType = atom()
+    while _token.isSymbol(SymbolType.Mult) do
+      val op = _token.symbolType()
+      advance()
+      emit("push RAX")
+      val rightType = atom()
+      rhs(leftType, rightType, op)
     leftType
 
   private def atom(): VarType =
-    val varType = _token.varType()
     _token.tokenType() match
-      case TokenType.Constant => atomConstant(varType)
-      case TokenType.Variable => atomVariable()
-      case _ => fail(s"Cannot parse atom $_token")
+      case TokenType.Constant => return atomConstant(_token.varType())
+      case TokenType.Variable => return atomVariable()
+      case TokenType.Symbol => {
+        if _token.isSymbol(SymbolType.OpenParen) then
+          expectSymbol(SymbolType.OpenParen)
+          val varType = expr()
+          expectSymbol(SymbolType.CloseParen)
+          return varType
+      }
+      case _ => {}
+    fail(s"Cannot parse atom $_token")
 
   private def atomConstant(varType: VarType): VarType =
     varType match
@@ -324,19 +360,17 @@ class Parser(
     advance() // eat the token we just processed
 
     if _token.tokenType() == TokenType.Symbol then
-      _token.symbolType() match {
+      _token.symbolType() match
         case SymbolType.OpenParen => return procCall(name)
         case SymbolType.OpenBracket => return arrayGet(name)
         case _ => {}
-      }
 
     val sym = _symTab.lookupVar(name)
     if sym == None then fail(s"Variable $name not found")
-    varType match {
+    varType match
       case VarType.VarTypeInt => emit(s"mov EAX, ${sym.get.location()}  ; get $name")
       case VarType.VarTypeArr => emit(s"mov RAX, ${sym.get.location()}  ; get $name")
       case _ => fail(s"Cannot get variable $name of type $varType")
-    }
     varType
 
   private def arrayGet(name: String): VarType =
