@@ -1,15 +1,11 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Input
 
-ainput%20 j=0
-ainput[j]='v j=j+1
-ainput[j]='= j=j+1
-ainput[j]='3 j=j+1
-ainput[j]='* j=j+1
-ainput[j]='4 j=j+1
-ainput[j]='# j=j+1
-ainput[j]='v j=j+1
-;ainput@
+;ainput%20 j=0
+;ainput[j]='$ j=j+1
+;ainput[j]='' j=j+1
+;ainput[j]='y j=j+1
+ainput@
 
 
 ;; Lexer constants
@@ -18,6 +14,7 @@ CONST=1
 VAR=2
 SYM=3 ; symbol/keyword
 ERROR=4
+CHARCONST=5
 
 PRINTCH='$
 PRINTINT='#
@@ -98,12 +95,12 @@ as[j]='t j=j+1
 as[j]='i j=j+1
 as[j]='o j=j+1
 as[j]='n j=j+2 DOTTEXT=j
-as[j]='. j=j+1 
+as[j]='. j=j+1
 as[j]='t j=j+1
 as[j]='e j=j+1
 as[j]='x j=j+1
 as[j]='t j=j+2 DOTDATA=j
-as[j]='. j=j+1 
+as[j]='. j=j+1
 as[j]='d j=j+1
 as[j]='a j=j+1
 as[j]='t j=j+1
@@ -124,7 +121,7 @@ as[j]='o j=j+1
 as[j]='l j=j+2 INTFMT=j
 as[j]='I j=j+1
 as[j]='N j=j+1
-as[j]='T j=j+1 
+as[j]='T j=j+1
 as[j]='_ j=j+1
 as[j]='F j=j+1
 as[j]='M j=j+1
@@ -200,7 +197,31 @@ as[j]='p j=j+2 IMUL=j
 as[j]='i j=j+1
 as[j]='m j=j+1
 as[j]='u j=j+1
-as[j]='l j=j+2
+as[j]='l j=j+2 CMP=j
+as[j]='c j=j+1
+as[j]='m j=j+1
+as[j]='p j=j+2 SETZ=j
+as[j]='s j=j+1
+as[j]='e j=j+1
+as[j]='t j=j+1
+as[j]='z j=j+2 SETL=j
+as[j]='s j=j+1
+as[j]='e j=j+1
+as[j]='t j=j+1
+as[j]='l j=j+2 JMP=j
+as[j]='j j=j+1
+as[j]='m j=j+1
+as[j]='p j=j+2 ALCOMMAZERO=j
+as[j]='A j=j+1
+as[j]='L j=j+1
+as[j]=', j=j+1
+as[j]='0 j=j+2 SETNZ=j
+as[j]='s j=j+1
+as[j]='e j=j+1
+as[j]='t j=j+1
+as[j]='n j=j+1
+as[j]='z j=j+2
+
 
 
 ;; Printing
@@ -226,7 +247,6 @@ _ ptwo(first second) (
 )
 
 _ printToken(at) (
-  $'; $32
   ? (at[0]=CONST) ( $'c $': $32 printstr(at 1) )
   ? (at[0]=VAR) ( $'v $': $32 printstr(at 1) )
   ? (at[0]=SYM) ( $'s $': $32 $at[1])
@@ -238,14 +258,13 @@ _ printToken(at) (
 atoken%1 ; this allocation will get thrown away
 
 _ fail() (
-  ptwo(BAD TOKEN) $': $32
-  printToken(atoken) 
+  ptwo(BAD TOKEN) $': $32 printToken(atoken)
   \ ; exit now
 )
 
 _ printVar(avarname offset) (
   ? (offset=0) ( $'[ $'_ printstr(avarname 0) $'])
-  : ($'p $'v fail()) 
+  : ($'p $'v fail())
 )
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -286,8 +305,8 @@ _ aMakeNumber() (
 _ aMakeCharConstant() (
   at%3
   vadvanceLexer()  ; skip the tick
-  at[0] = CONST
-  at[1] = cc ; have to convert this to...ascii?
+  at[0] = CHARCONST
+  at[1] = cc
   vadvanceLexer()  ; eat the character
   ^at
 )
@@ -318,7 +337,7 @@ _ aMakeSymbol() (
     )
     i=i+1
   )
-  ptwo(BAD SYMBOL) $': $cc $32 $'( #cc $') 
+  ptwo(BAD SYMBOL) $': $cc $32 $'( #cc $')
   \ ; exit
 )
 
@@ -370,7 +389,7 @@ _ printtokens() (
 
 _ vadvance() (
   atoken = aNextToken()
-  printToken(atoken)
+  $'; $32 printToken(atoken)
 )
 
 
@@ -408,13 +427,25 @@ VARTYPEARR=2
 _ parseAtom() (
   ? (atoken[0]=CONST) (
     mov() reg(EAX) $', printstr(atoken 1) $10
+
+    vadvance()
+    ^VARTYPEINT
+  )
+
+  ? (atoken[0]=CHARCONST) (
+    ; print as a number
+    mov() reg(EAX) $', #(atoken[1]) $10
+
     vadvance()
     ^VARTYPEINT
   )
   ? (atoken[0]=VAR) (
     avar = acopyValue()
+    vadvance()
+    ; TODO: if [ do array dereference
+    ; TODO: if ( do function call
+    ; TODO: infer variable type and use RAX if array
     mov() reg(EAX) $', printVar(avar 0) $10
-    ; TODO: infer variable type
     ^VARTYPEINT
   )
   : ( $'a $'t $'o $'m fail() )
@@ -430,35 +461,57 @@ _ expectSymbol(s) (
   : ( pone(EXPECTED) $s $32 $'s $'a $'w $32 $atoken[1] $10 fail())
 )
 
-_ isMathSymbol(at) (
-  ^ (isSymbol(PLUS) | isSymbol(MULT))
+_ isMathSymbol() (
+  ^ (isSymbol(PLUS) | isSymbol(MULT) | isSymbol(EQ) | isSymbol(NEQ) |
+    isSymbol(LT))
 )
 
 
 _ expr() (
-  ? ( isSymbol(OPENPAREN)=true ) ( 
+
+  ? ( isSymbol(OPENPAREN)=true ) (
     expectSymbol(OPENPAREN)
     type = expr()
     expectSymbol(CLOSEPAREN)
     ^type
   )
-  : ( 
-    leftType = parseAtom() 
+  : (
+    leftType = parseAtom()
 
     ; if good symbol
-    ? (isMathSymbol(atoken)=true) (
+    ? (isMathSymbol()=true) (
       ; save symbol
       symbol = atoken[1]
+
       vadvance()
       ; push rax
       pone(PUSH) reg(RAX) $10
       rightType = parseAtom()
       ; pop rbx
       pone(POP) reg(RBX) $10
+
       ; emit the code for the symbol
       ? (symbol=PLUS) ( pone(ADD) reg(RAX) $', reg(RBX) $10 ^leftType)
       ? (symbol=MULT) ( pone(IMUL) reg(RAX) $', reg(RBX) $10 ^leftType)
-      pone(EXPECTED) $'+ $'* $32 $', $'s $'a $'w $32 $symbol $10
+      ? (symbol=EQ) (
+        ; cmp EBX, EAX, setz AL
+        pone(CMP) reg(RBX) $', reg(RAX) $10
+        pone(SETZ) $'A $'L $10
+        ^leftType
+      )
+      ? (symbol=NEQ) (
+        ; cmp EBX, EAX, setnz AL
+        pone(CMP) reg(RBX) $', reg(RAX) $10
+        pone(SETNZ) $'A $'L $10
+        ^leftType
+      )
+      ? (symbol=LT) (
+        ; cmp EBX, EAX, setl AL
+        pone(CMP) reg(RBX) $', reg(RAX) $10
+        pone(SETL) $'A $'L $10
+        ^leftType
+      )
+      $'U $'n ptwo(EXPECTED SYMBOL) $symbol $10
       fail()
     )
 
@@ -478,21 +531,69 @@ _ emitExtern(function) (
 )
 
 
+
 ;; Data segment
-aDATA%1000 
-ndata=0 ; # of bytes of data
+aDATA%1000 ndata=0 ; # of bytes of data
+
+
+intFmtAdded=false
 
 _ vaddData(asource start end) (
-  ; TODO: detect if we already copied this or not
   i=start
   ~ (i<end & asource[i]!0) (aDATA[ndata]=asource[i] i=i+1 ndata=ndata+1)
   aDATA[ndata]=10 ndata=ndata+1
 )
 
-_ vaddGlobal(asource type) (
-  aDATA[ndata]='_ ndata=ndata+1
-  i=0 ~(asource[i]!0) (aDATA[ndata]=asource[i] i=i+1 ndata=ndata+1)
-  vaddData(as GLOBALDD 99999999)
+aPRIMES%10
+aPRIMES[0]=73
+aPRIMES[1]=179
+aPRIMES[2]=283
+aPRIMES[3]=419
+aPRIMES[4]=547
+aPRIMES[5]=31
+aPRIMES[6]=131
+aPRIMES[7]=239
+aPRIMES[8]=359
+aPRIMES[9]=479
+
+_ hash(astring) (
+  i=0 pi=0 ; prime index
+  r=137 ; result
+  ~ (astring[i]!0) (
+    r=r*101+astring[i]*aPRIMES[pi]
+    pi=pi+1
+    ?(pi=10) (pi=0)
+    i=i+1
+  )
+  ^r
+)
+
+aHASHES%1000 nhashes=0
+
+_ globalExists(aname) (
+  thehash=hash(aname)
+  i=0 ~(i<nhashes) (
+    ?(aHASHES[i]=thehash) (^true) ; found
+    i=i+1
+  )
+  ; not found, add to the end
+  aHASHES[nhashes]=thehash
+  nhashes=nhashes+1
+  ^false
+)
+
+
+; add a global with the given name and type (int or array)
+_ vaddGlobal(aname type) (
+
+  ~ (globalExists(aname)=false) (
+    ; add _(name)
+    aDATA[ndata]='_ ndata=ndata+1
+    i=0 ~(aname[i]!0) (aDATA[ndata]=aname[i] i=i+1 ndata=ndata+1)
+
+    ; add :dd 0 TODO If array use dq not dd
+    vaddData(as GLOBALDD 99999999)
+  )
 )
 
 
@@ -506,16 +607,19 @@ _ parsePrint() (
     xfer(ECX EAX)
     emitExtern(PUTCHAR)
   )
-  : ( 
+  : (
     ; add data INT_FMT: db '%d', 0
-    vaddData(as INTFMT INTFMTEND)
+    ~ (intFmtAdded=false) (
+      vaddData(as INTFMT INTFMTEND)
+      intFmtAdded=true
+    )
     ; mov RCX, INT_FMT
     mov() reg(RCX) $', printbw(INTFMT INTEND) $10
     ; mov edx, eax
     xfer(EDX EAX)
 
     emitExtern(PRINTF)
-  ) 
+  )
   ^0
 )
 
@@ -525,9 +629,85 @@ _ parseStop() (
   ^0
 )
 
+id=0
+
+_ nextLabel() (
+  id=id+1
+  ^ id
+)
+
+_ emitLabel(labelid)  (
+  $'L #labelid $': $10
+)
+
+
+_ parseIf() (
+  expectSymbol(IF)
+  exprType = expr()
+
+  elseLabel = nextLabel()
+  endIfLabel = nextLabel()
+
+  ; cmp al, 0
+  ptwo(CMP ALCOMMAZERO) $10
+  ; je Lelselabel
+  $'j $'e $32 $'L #elseLabel $10
+
+  expectSymbol(OPENPAREN)
+  ~ (atoken[0]!EOF & isSymbol(CLOSEPAREN)=false) (
+    statement()
+  )
+  expectSymbol(CLOSEPAREN)
+  hasElse = isSymbol(ELSE)
+  ? (hasElse) (
+    pone(JMP) $'L #endIfLabel $10
+  )
+  emitLabel(elseLabel)
+
+  ? (hasElse) (
+    expectSymbol(ELSE)
+    expectSymbol(OPENPAREN)
+    ~ (atoken[0]!EOF & isSymbol(CLOSEPAREN)=false) (
+      statement()
+    )
+    expectSymbol(CLOSEPAREN)
+    emitLabel(endIfLabel)
+  )
+)
+
+_ parseWhile() (
+  expectSymbol(WHILE)
+
+  startLabel = nextLabel()
+  endLabel = nextLabel()
+  emitLabel(startLabel)
+
+  stopType = expr() ; TODO: check type
+
+  ; cmp al, 0
+  ptwo(CMP ALCOMMAZERO) $10
+  ; je Llabel
+  $'j $'e $32 $'L #endLabel $10
+
+  expectSymbol(OPENPAREN)
+  ~ (atoken[0]!EOF & isSymbol(CLOSEPAREN)=false) (
+    statement()
+  )
+  expectSymbol(CLOSEPAREN)
+
+  ; jmp Lend
+  pone(JMP) $'L #startLabel $10
+  emitLabel(endLabel)
+)
+
+
 _ startsWithSymbol() (
-  ? ( atoken[1]=PRINTCH | atoken[1]=PRINTINT) ( ^parsePrint() ) 
-  ? ( atoken[1]=STOP) ( ^parseStop() ) 
+  ? ( atoken[1]=IF) ( ^parseIf() )
+  ? ( atoken[1]=PRINTCH | atoken[1]=PRINTINT) ( ^parsePrint() )
+  ? ( atoken[1]=STOP) ( ^parseStop() )
+  ? ( atoken[1]=WHILE) ( ^parseWhile() )
+  ; TODO if ^ ret
+  ; TODO if _ define proc
   $'s $'w $'s fail()
 )
 
@@ -545,6 +725,8 @@ _ startsWithVar() (
   aname=acopyValue()
   vadvance()
   ? (atoken[0]=SYM & atoken[1]='=) (parseAssign(aname))
+  ; TODO: if ( do function call
+  ; TODO: if [ do array set
 )
 
 

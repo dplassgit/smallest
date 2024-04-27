@@ -64,5 +64,8 @@ def newConstant(value: String): Token =
     new Token(TokenType.Constant, value, _varType=VarType.VarTypeInt)
 
 def inferType(name: String): VarType = 
-    if name(0) == 'a' then VarType.VarTypeArr else VarType.VarTypeInt
+  if name(0) == 'a' then VarType.VarTypeArr else VarType.VarTypeInt
+
+def inferRetType(name: String): VarType =
+  if name(0) == 'v' then VarType.NoVarType else inferType(name)
 

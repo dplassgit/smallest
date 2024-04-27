@@ -275,8 +275,6 @@ class Parser(
           _token.tokenType() != TokenType.EndOfFile do
         statement()
       expectSymbol(SymbolType.CloseParen)
-
-    if hasElse then
       emitLabel(endifLabel)
 
   private def parsePrint(): Unit =
@@ -434,10 +432,14 @@ class Parser(
   private def procCall(name: String, allowVoid: Boolean): VarType =
     // look up procedure.
     val procSym = _globalSymTab.lookupProc(name)
-    if procSym == None then fail(s"Proc $name not found")
-    val retType = procSym.get.varType()
-    if !allowVoid && retType == VarType.NoVarType then
-      fail(s"Cannot assign to void function $name")
+    var retType = VarType.NoVarType
+    if procSym != None then 
+      retType = procSym.get.varType()
+      if !allowVoid && retType == VarType.NoVarType then
+        fail(s"Cannot assign to void function $name")
+    else
+      // allows for forward declarations
+      retType = inferRetType(name)
 
     expectSymbol(SymbolType.OpenParen)
 
@@ -448,9 +450,11 @@ class Parser(
       actual += 1
       emit(s"push RAX")
     expectSymbol(SymbolType.CloseParen)
-    val expected = procSym.get.params().length
-    if actual != expected then
-      fail(s"Wrong # of params to $name: expected $expected, saw $actual")
+
+    if procSym != None then
+      val expected = procSym.get.params().length
+      if actual != expected then
+        fail(s"Wrong # of params to $name: expected $expected, saw $actual")
 
     // the return value will be in EAX
     emit(s"call _$name")

@@ -1,0 +1,12 @@
+# compile the compiler 
+scripts/compile src/bootstrap.spl
+
+# use the compiler to compile the input
+BASE=`basename -s .spl $1`
+rm -f $BASE.exe $BASE.obj $BASE.asm
+
+./bootstrap.exe < $1 > $BASE.asm
+
+nasm -fwin64 $BASE.asm && gcc $BASE.obj -o $BASE.exe
+
+test -x $BASE.exe && ./$BASE.exe

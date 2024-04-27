@@ -19,7 +19,7 @@ class SymTab(
   // Declare procedure
   def declareProc(name: String, params: List[String]): ProcSymbol =
     if !isGlobal() then fail("Cannot nest functions")
-    val retType = if name(0) == 'v' then VarType.NoVarType else inferType(name)
+    val retType = inferRetType(name)
     val child = spawn()
     var i = params.length
     for param <- params do
