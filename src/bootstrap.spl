@@ -1,0 +1,593 @@
+;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Input
+
+ainput%20 j=0
+ainput[j]='v j=j+1
+ainput[j]='= j=j+1
+ainput[j]='3 j=j+1
+ainput[j]='* j=j+1
+ainput[j]='4 j=j+1
+ainput[j]='# j=j+1
+ainput[j]='v j=j+1
+;ainput@
+
+
+;; Lexer constants
+EOF=0
+CONST=1
+VAR=2
+SYM=3 ; symbol/keyword
+ERROR=4
+
+PRINTCH='$
+PRINTINT='#
+IF='?
+ELSE=':
+WHILE='~
+RETURN='^
+AND='&
+OR='|
+LENGTH='%
+PLUS='+
+MINUS='-
+MULT='*
+EQ='=
+NEQ='!
+LT='<
+INPUT='@
+OPENPAREN='(
+CLOSEPAREN=')
+OPENBRACKET='[
+CLOSEBRACKET=']
+PROCDEF='_
+STOP='\
+
+NUMSYMBOLS=22
+aSYMBOLS%NUMSYMBOLS j=0
+aSYMBOLS[j]=PRINTCH j=j+1
+aSYMBOLS[j]=PRINTINT j=j+1
+aSYMBOLS[j]=IF j=j+1
+aSYMBOLS[j]=ELSE j=j+1
+aSYMBOLS[j]=WHILE j=j+1
+aSYMBOLS[j]=RETURN j=j+1
+aSYMBOLS[j]=AND j=j+1
+aSYMBOLS[j]=OR j=j+1
+aSYMBOLS[j]=LENGTH j=j+1
+aSYMBOLS[j]=PLUS j=j+1
+aSYMBOLS[j]=MINUS j=j+1
+aSYMBOLS[j]=MULT j=j+1
+aSYMBOLS[j]=EQ j=j+1
+aSYMBOLS[j]=NEQ j=j+1
+aSYMBOLS[j]=LT j=j+1
+aSYMBOLS[j]=OPENPAREN j=j+1
+aSYMBOLS[j]=CLOSEPAREN j=j+1
+aSYMBOLS[j]=OPENBRACKET j=j+1
+aSYMBOLS[j]=CLOSEBRACKET j=j+1
+aSYMBOLS[j]=PROCDEF j=j+1
+aSYMBOLS[j]=INPUT j=j+1
+aSYMBOLS[j]=STOP j=j+1
+
+true=1
+false=0
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; String table
+
+as%1000 j=0 HEADER=0
+as[j]='; j=j+1
+as[j]=32 j=j+1
+as[j]='s j=j+1
+as[j]='p j=j+1
+as[j]='l j=j+1
+as[j]=10 j=j+1
+as[j]='g j=j+1
+as[j]='l j=j+1
+as[j]='o j=j+1
+as[j]='b j=j+1
+as[j]='a j=j+1
+as[j]='l j=j+1
+as[j]=32 j=j+1 MAIN=j
+as[j]='m j=j+1
+as[j]='a j=j+1
+as[j]='i j=j+1
+as[j]='n j=j+2 SECTION=j
+as[j]='s j=j+1
+as[j]='e j=j+1
+as[j]='c j=j+1
+as[j]='t j=j+1
+as[j]='i j=j+1
+as[j]='o j=j+1
+as[j]='n j=j+2 DOTTEXT=j
+as[j]='. j=j+1 
+as[j]='t j=j+1
+as[j]='e j=j+1
+as[j]='x j=j+1
+as[j]='t j=j+2 DOTDATA=j
+as[j]='. j=j+1 
+as[j]='d j=j+1
+as[j]='a j=j+1
+as[j]='t j=j+1
+as[j]='a j=j+2 BAD=j
+as[j]='B j=j+1
+as[j]='a j=j+1
+as[j]='d j=j+2 TOKEN=j
+as[j]='t j=j+1
+as[j]='o j=j+1
+as[j]='k j=j+1
+as[j]='e j=j+1
+as[j]='n j=j+2 SYMBOL=j
+as[j]='s j=j+1
+as[j]='y j=j+1
+as[j]='m j=j+1
+as[j]='b j=j+1
+as[j]='o j=j+1
+as[j]='l j=j+2 INTFMT=j
+as[j]='I j=j+1
+as[j]='N j=j+1
+as[j]='T j=j+1 
+as[j]='_ j=j+1
+as[j]='F j=j+1
+as[j]='M j=j+1
+as[j]='T j=j+1 INTEND=j
+as[j]=': j=j+1
+as[j]='d j=j+1
+as[j]='b j=j+1
+as[j]='' j=j+1
+as[j]='% j=j+1
+as[j]='d j=j+1
+as[j]='' j=j+1
+as[j]=', j=j+1
+as[j]='0 j=j+2 INTFMTEND=j EXTERN=j
+as[j]='e j=j+1
+as[j]='x j=j+1
+as[j]='t j=j+1
+as[j]='e j=j+1
+as[j]='r j=j+1
+as[j]='n j=j+2 SUB=j
+as[j]='s j=j+1
+as[j]='u j=j+1
+as[j]='b j=j+2 RSP=j
+as[j]='R j=j+1
+as[j]='S j=j+1
+as[j]='P j=j+1
+as[j]=', j=j+1
+as[j]='3 j=j+1
+as[j]='2 j=j+2 ADD=j
+as[j]='a j=j+1
+as[j]='d j=j+1
+as[j]='d j=j+2 CALL=j
+as[j]='c j=j+1
+as[j]='a j=j+1
+as[j]='l j=j+1
+as[j]='l j=j+2 PUTCHAR=j
+as[j]='p j=j+1
+as[j]='u j=j+1
+as[j]='t j=j+1
+as[j]='c j=j+1
+as[j]='h j=j+1
+as[j]='a j=j+1
+as[j]='r j=j+2 EXIT=j
+as[j]='e j=j+1
+as[j]='x j=j+1
+as[j]='i j=j+1
+as[j]='t j=j+2 PRINTF=j
+as[j]='p j=j+1
+as[j]='r j=j+1
+as[j]='i j=j+1
+as[j]='n j=j+1
+as[j]='t j=j+1
+as[j]='f j=j+2 GLOBALDD=j ; :dd 0
+as[j]=': j=j+1
+as[j]='d j=j+1
+as[j]='d j=j+1
+as[j]=32 j=j+1
+as[j]='0 j=j+2 EXPECTED=j
+as[j]='E j=j+1
+as[j]='x j=j+1
+as[j]='p j=j+1
+as[j]='e j=j+1
+as[j]='c j=j+1
+as[j]='t j=j+1
+as[j]='e j=j+1
+as[j]='d j=j+2 PUSH=j
+as[j]='p j=j+1
+as[j]='u j=j+1
+as[j]='s j=j+1
+as[j]='h j=j+2 POP=j
+as[j]='p j=j+1
+as[j]='o j=j+1
+as[j]='p j=j+2 IMUL=j
+as[j]='i j=j+1
+as[j]='m j=j+1
+as[j]='u j=j+1
+as[j]='l j=j+2
+
+
+;; Printing
+
+_ printbetween(amsg start end) (
+  i=start ~(amsg[i]!0 & i<end) ( $amsg[i] i=i+1 )
+  $32
+)
+
+_ pone(start) (
+  printbetween(as start 9999999)
+)
+_ printbw(start end) (
+  printbetween(as start end)
+)
+
+_ printstr(amsg s) (
+  printbetween(amsg s 99999999)
+)
+
+_ ptwo(first second) (
+  pone(first) pone(second)
+)
+
+_ printToken(at) (
+  $'; $32
+  ? (at[0]=CONST) ( $'c $': $32 printstr(at 1) )
+  ? (at[0]=VAR) ( $'v $': $32 printstr(at 1) )
+  ? (at[0]=SYM) ( $'s $': $32 $at[1])
+  ? (at[0]=ERROR) ( $'!)
+  ? (at[0]=EOF) ( $'$)
+  $10
+)
+
+atoken%1 ; this allocation will get thrown away
+
+_ fail() (
+  ptwo(BAD TOKEN) $': $32
+  printToken(atoken) 
+  \ ; exit now
+)
+
+_ printVar(avarname offset) (
+  ? (offset=0) ( $'[ $'_ printstr(avarname 0) $'])
+  : ($'p $'v fail()) 
+)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Lexer globals
+loc=0   ; index into text
+cc=0  ; current char
+
+_ vadvanceLexer() (
+   ? (ainput[loc]!0) ( cc=ainput[loc] )
+   : ( cc=0 )
+   loc=loc+1
+)
+
+_ isNumber(c) (
+  ^ (('0-1)<c & c<('9+1))
+)
+
+_ isAlpha(c) (
+  ? (('a-1)<c & c<('z+1)) (^true)
+  ? (('A-1)<c & c<('Z+1)) (^true)
+  ^false
+)
+
+_ aMakeNumber() (
+  at%20
+  at[0] = CONST
+  at[1] = cc
+  i = 2
+  vadvanceLexer()
+  ~ (cc!0 & isNumber(cc)=true & i<20) (
+    at[i] = cc
+    i = i + 1
+    vadvanceLexer()
+  )
+  ^at
+)
+
+_ aMakeCharConstant() (
+  at%3
+  vadvanceLexer()  ; skip the tick
+  at[0] = CONST
+  at[1] = cc ; have to convert this to...ascii?
+  vadvanceLexer()  ; eat the character
+  ^at
+)
+
+_ aMakeText() (
+  at%20
+  at[0] = VAR
+  at[1] = cc
+  i = 2
+  vadvanceLexer()
+  ~ (cc!0 & isAlpha(cc)=true & i<20) (
+    at[i] = cc
+    i = i + 1
+    vadvanceLexer()
+  )
+  ^at
+)
+
+_ aMakeSymbol() (
+  at%2
+  at[0] = SYM
+  i=0
+  ~ (i < NUMSYMBOLS) ( ; & aSYMBOLS[i]!0) (
+    ? (aSYMBOLS[i]=cc) ( ; found it
+      at[1]=cc
+      vadvanceLexer()
+      ^at
+    )
+    i=i+1
+  )
+  ptwo(BAD SYMBOL) $': $cc $32 $'( #cc $') 
+  \ ; exit
+)
+
+_ skipWhitespace() (
+  more=true
+  ~ (more=true) (
+    ~ (cc=10|cc=13|cc=32|cc=8) (vadvanceLexer()) ; whitespace
+    ? (cc=';) (
+       ; skip comment until EOL
+       ~ (cc!10 & cc!0) (vadvanceLexer())
+    )
+    : (more=false)
+  )
+)
+
+; returns array of (up to) 20 ints
+; 0 has type: end of file, constant (int), variable, keyword, symbol
+; 1 if keyword or symbol: the character
+; 1 through 19: variable or constant value (0-terminated)
+_ aNextToken() (
+  skipWhitespace()
+  ? (cc=0) ( at%1 at[0]=EOF ^at) ; end of file
+  ? (isNumber(cc)=true) ( ^aMakeNumber() )
+  ? (isAlpha(cc)=true) ( ^aMakeText() )
+  ? (cc=39) ( ^aMakeCharConstant() )
+  ^aMakeSymbol()
+)
+
+; Debugging
+_ printtokens() (
+  vadvanceLexer()
+
+  atemptoken = aNextToken()
+  printToken(atemptoken)
+
+  ~ (atemptoken[0]!EOF) (
+    atemptoken = aNextToken()
+    printToken(atemptoken)
+  )
+)
+
+; Debugging
+;printtokens() \
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; PARSER
+
+
+_ vadvance() (
+  atoken = aNextToken()
+  printToken(atoken)
+)
+
+
+; Copies the value of the token into a new array.
+_ acopyValue() (
+  i=0 ~(atoken[i+1]!0) (i=i+1)
+  adest%(i+1)
+  i=1 ~(atoken[i]!0 & i<20) (adest[i-1]=atoken[i] i=i+1)
+  ^adest
+)
+
+_ call(start) (
+  ptwo(CALL start) $10
+)
+
+
+RAX=0 RBX=1 RCX=2 RDX=3
+EAX=4 EBX=5 ECX=6 EDX=7
+
+_ reg(index) (
+  ? (index<EAX) ( $'R $(index+'A))
+  : ( $'E $((index-EAX)+'A))
+  $'X
+)
+
+_ mov() ( $'m $'o $'v $32 )
+
+_ xfer(dest src) (
+  mov() reg(dest) $', reg(src) $10
+)
+
+VARTYPEINT=1
+VARTYPEARR=2
+
+_ parseAtom() (
+  ? (atoken[0]=CONST) (
+    mov() reg(EAX) $', printstr(atoken 1) $10
+    vadvance()
+    ^VARTYPEINT
+  )
+  ? (atoken[0]=VAR) (
+    avar = acopyValue()
+    mov() reg(EAX) $', printVar(avar 0) $10
+    ; TODO: infer variable type
+    ^VARTYPEINT
+  )
+  : ( $'a $'t $'o $'m fail() )
+  ^0
+)
+
+_ isSymbol(s) (
+  ^(atoken[0]=SYM & atoken[1]=s)
+)
+
+_ expectSymbol(s) (
+  ? (isSymbol(s)=true) ( vadvance() )
+  : ( pone(EXPECTED) $s $32 $'s $'a $'w $32 $atoken[1] $10 fail())
+)
+
+_ isMathSymbol(at) (
+  ^ (isSymbol(PLUS) | isSymbol(MULT))
+)
+
+
+_ expr() (
+  ? ( isSymbol(OPENPAREN)=true ) ( 
+    expectSymbol(OPENPAREN)
+    type = expr()
+    expectSymbol(CLOSEPAREN)
+    ^type
+  )
+  : ( 
+    leftType = parseAtom() 
+
+    ; if good symbol
+    ? (isMathSymbol(atoken)=true) (
+      ; save symbol
+      symbol = atoken[1]
+      vadvance()
+      ; push rax
+      pone(PUSH) reg(RAX) $10
+      rightType = parseAtom()
+      ; pop rbx
+      pone(POP) reg(RBX) $10
+      ; emit the code for the symbol
+      ? (symbol=PLUS) ( pone(ADD) reg(RAX) $', reg(RBX) $10 ^leftType)
+      ? (symbol=MULT) ( pone(IMUL) reg(RAX) $', reg(RBX) $10 ^leftType)
+      pone(EXPECTED) $'+ $'* $32 $', $'s $'a $'w $32 $symbol $10
+      fail()
+    )
+
+    ^leftType
+  )
+)
+
+
+_ emitExtern(function) (
+ ; extern (function)
+ ptwo(EXTERN function) $10
+ ; sub rsp, 32
+ ptwo(SUB RSP) $10
+ call(function)
+ ; add rsp, 32
+ ptwo(ADD RSP) $10
+)
+
+
+;; Data segment
+aDATA%1000 
+ndata=0 ; # of bytes of data
+
+_ vaddData(asource start end) (
+  ; TODO: detect if we already copied this or not
+  i=start
+  ~ (i<end & asource[i]!0) (aDATA[ndata]=asource[i] i=i+1 ndata=ndata+1)
+  aDATA[ndata]=10 ndata=ndata+1
+)
+
+_ vaddGlobal(asource type) (
+  aDATA[ndata]='_ ndata=ndata+1
+  i=0 ~(asource[i]!0) (aDATA[ndata]=asource[i] i=i+1 ndata=ndata+1)
+  vaddData(as GLOBALDD 99999999)
+)
+
+
+_ parsePrint() (
+  printch = (atoken[1]=PRINTCH)
+  vadvance()   ; eat the character
+
+  type = expr() ; ignoring return type for now.
+
+  ? (printch=true) (
+    xfer(ECX EAX)
+    emitExtern(PUTCHAR)
+  )
+  : ( 
+    ; add data INT_FMT: db '%d', 0
+    vaddData(as INTFMT INTFMTEND)
+    ; mov RCX, INT_FMT
+    mov() reg(RCX) $', printbw(INTFMT INTEND) $10
+    ; mov edx, eax
+    xfer(EDX EAX)
+
+    emitExtern(PRINTF)
+  ) 
+  ^0
+)
+
+_ parseStop() (
+  vadvance()
+  call(EXIT)
+  ^0
+)
+
+_ startsWithSymbol() (
+  ? ( atoken[1]=PRINTCH | atoken[1]=PRINTINT) ( ^parsePrint() ) 
+  ? ( atoken[1]=STOP) ( ^parseStop() ) 
+  $'s $'w $'s fail()
+)
+
+
+_ parseAssign(avarname) (
+  vadvance() ; eat the =
+  expr()
+  ; TODO: get the offset of this variable
+  vaddGlobal(avarname 0)
+  mov() printVar(avarname 0) $', reg(EAX) $10
+)
+
+
+_ startsWithVar() (
+  aname=acopyValue()
+  vadvance()
+  ? (atoken[0]=SYM & atoken[1]='=) (parseAssign(aname))
+)
+
+
+_ statement() (
+  ? (atoken[0]=SYM) ( ^startsWithSymbol() )
+  ? (atoken[0]=VAR) ( ^startsWithVar() )
+  ? (atoken[0]=EOF) ( ^0 )
+  $'s fail()
+)
+
+
+_ statements() (
+  ~ (atoken[0]!EOF) (
+    statement()
+  )
+)
+
+_ parse() (
+  ; $'; printstr(ainput 0)
+
+  vadvanceLexer() ; prime the lexer
+
+  ; global main
+  printstr(as HEADER) $10
+  ; section .text
+  ptwo(SECTION DOTTEXT) $10
+
+  printstr(as MAIN) $': $10
+
+  vadvance() ; prime the parser
+
+  statements()
+
+  emitExtern(EXIT)
+  $'r $'e $'t $10
+
+  ? (ndata!0) (
+    $10
+    ; section .data
+    ptwo(SECTION DOTDATA) $10
+    printstr(aDATA 0)
+  )
+)
+
+parse()
+

@@ -5,7 +5,7 @@ class ParserTest extends munit.FunSuite:
   test("empty string") {
     val parser = new Parser("")
     val code = decomment(parser.parse())
-    assert(code.length == 6)
+    assert(code.length == 7)
   }
 
   test("print int constant") {
@@ -351,6 +351,11 @@ class ParserTest extends munit.FunSuite:
     assert(code.contains("  _a: dq 0"))
   }
 
+  test("stop") {
+    val parser = new Parser("\\")
+    val code = decomment(parser.parse())
+    assert(code.contains("  call exit"))
+  }
 end ParserTest
 
 

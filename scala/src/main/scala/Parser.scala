@@ -37,10 +37,11 @@ class Parser(
     emit0("; scala")
     emit0("global main")
     emit0("section .text")
+    emit0("extern exit")
     emit0("main:")
     statements()
-    emit("extern exit")
     emit("call exit")
+    emit("ret")
     if _data.size > 0 then
       emit0("section .data")
       for entry <- _data do
@@ -68,7 +69,12 @@ class Parser(
       case SymbolType.While => parseWhile()
       case SymbolType.If => parseIf()
       case SymbolType.Return => parseReturn()
+      case SymbolType.Stop => parseStop()
       case _ => fail(s"Cannot parse $_token")
+
+  private def parseStop(): Unit =
+    expectSymbol(SymbolType.Stop) // go past the \
+    emit("call exit")
 
   private def defineProc(): Unit =
     expectSymbol(SymbolType.ProcDef) // go past the _

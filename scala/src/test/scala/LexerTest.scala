@@ -106,7 +106,7 @@ class LexerTest extends munit.FunSuite:
   }
 
   test("invalid symbols are invalid") {
-    val lexer = new Lexer("\\")
+    val lexer = new Lexer("{")
     intercept[Exception]{lexer.nextToken()}
   }
 

@@ -25,6 +25,7 @@ enum SymbolType(t: String):
   case OpenBracket extends SymbolType("[")
   case CloseBracket extends SymbolType("]")
   case ProcDef extends SymbolType("_")
+  case Stop extends SymbolType("\\")
   case NoSymbol extends SymbolType("")
   def text(): String = t
 
