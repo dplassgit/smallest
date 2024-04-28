@@ -1,5 +1,14 @@
-;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; Input
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; SPL Compiler written in SPL
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+true=1
+false=0
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Input
 
 ;ainput%20 j=0
 ;ainput[j]='$ j=j+1
@@ -8,7 +17,11 @@
 ainput@
 
 
-;; Lexer constants
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; LEXER
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; Token types
 EOF=0
 CONST=1
 VAR=2
@@ -16,6 +29,7 @@ SYM=3 ; symbol/keyword
 ERROR=4
 CHARCONST=5
 
+;; Symbols/Keywords
 PRINTCH='$
 PRINTINT='#
 IF='?
@@ -64,11 +78,10 @@ aSYMBOLS[j]=PROCDEF j=j+1
 aSYMBOLS[j]=INPUT j=j+1
 aSYMBOLS[j]=STOP j=j+1
 
-true=1
-false=0
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; String table
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Table of strings for printing
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 as%1000 j=0 HEADER=0
 as[j]='; j=j+1
@@ -232,13 +245,16 @@ as[j]='h j=j+1
 as[j]='g j=j+2
 
 
-;; Printing
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Printing functions
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 _ printbetween(amsg start end) (
   i=start ~(amsg[i]!0 & i<end) ( $amsg[i] i=i+1 )
   $32
 )
 
+; Print one
 _ pone(start) (
   printbetween(as start 9999999)
 )
@@ -246,14 +262,17 @@ _ printbw(start end) (
   printbetween(as start end)
 )
 
+; Print string from s to 0
 _ printstr(amsg s) (
   printbetween(amsg s 99999999)
 )
 
+; Print two strings
 _ ptwo(first second) (
   pone(first) pone(second)
 )
 
+; Print the given token (for debugging)
 _ printToken(at) (
   ? (at[0]=CONST) ( $'c $': $32 printstr(at 1) )
   ? (at[0]=VAR) ( $'v $': $32 printstr(at 1) )
@@ -268,8 +287,10 @@ _ fail(at) (
   \ ; exit now
 )
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; Lexer globals
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Lexer globals
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 loc=0   ; index into text
 cc=0  ; current char
 
@@ -354,6 +375,7 @@ _ skipWhitespace() (
   )
 )
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; returns array of (up to) 20 ints
 ; 0 has type: end of file, constant (int), variable, keyword, symbol
 ; 1 if keyword or symbol: the character
@@ -367,44 +389,73 @@ _ aNextToken() (
   ^aMakeSymbol()
 )
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Debugging
-_ printtokens() (
-  vadvanceLexer()
-
-  atemptoken = aNextToken()
-  printToken(atemptoken)
-
-  ~ (atemptoken[0]!EOF) (
-    atemptoken = aNextToken()
-    printToken(atemptoken)
-  )
-)
-
-; Debugging
+;_ printtokens() (
+;  vadvanceLexer()
+;
+;  atemptoken = aNextToken()
+;  printToken(atemptoken)
+;
+;  ~ (atemptoken[0]!EOF) (
+;    atemptoken = aNextToken()
+;    printToken(atemptoken)
+;  )
+;)
 ;printtokens() \
 
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; PARSER
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; PARSER
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
-; Global
+;; Current token
 atoken%1 ; this allocation will get thrown away
 
+
+id=0
+_ nextLabel() (
+  id=id+1
+  ^ id
+)
 
 _ vadvance() (
   atoken = aNextToken()
   $'; $32 printToken(atoken)
 )
 
-; print variable with the given offset. 0 offset=global
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Print helpers
+
+; Print variable with the given offset. 0 offset=global
 _ printVar(avarname offset) (
   ? (offset=0) ( $'[ $'_ printstr(avarname 0) $'])
   : ($'p $'v fail(atoken))
 )
 
 
-; Copies the value of the token into a new array.
+_ call(start) (
+  ptwo(CALL start) $10
+)
+
+_ emitExtern(function) (
+ ; extern (function)
+ ptwo(EXTERN function) $10
+ ; sub rsp, 32
+ ptwo(SUB RSP) $10
+ call(function)
+ ; add rsp, 32
+ ptwo(ADD RSP) $10
+)
+
+_ emitLabel(labelid)  (
+  $'L #labelid $': $10
+)
+
+
+; Copy the value of the token into a new array.
 _ acopyValue() (
   i=0 ~(atoken[i+1]!0) (i=i+1)
   adest%(i+1)
@@ -412,10 +463,9 @@ _ acopyValue() (
   ^adest
 )
 
-_ call(start) (
-  ptwo(CALL start) $10
-)
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Registers
 
 RAX=0 RBX=1 RCX=2 RDX=3
 EAX=4 EBX=5 ECX=6 EDX=7
@@ -440,8 +490,20 @@ _ pop(register) (
   pone(POP) reg(register) $10
 )
 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Var types
 VARTYPEINT=1
 VARTYPEARR=2
+
+
+_ expectSymbol(s) (
+  ? (isSymbol(s)=true) ( vadvance() )
+  : ( pone(EXPECTED) $s $32 $'s $'a $'w $32 $atoken[1] $10 fail(atoken))
+)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Expression parsing
 
 _ parseAtom() (
   ? (atoken[0]=CONST) (
@@ -481,11 +543,6 @@ _ parseAtom() (
 
 _ isSymbol(s) (
   ^(atoken[0]=SYM & atoken[1]=s)
-)
-
-_ expectSymbol(s) (
-  ? (isSymbol(s)=true) ( vadvance() )
-  : ( pone(EXPECTED) $s $32 $'s $'a $'w $32 $atoken[1] $10 fail(atoken))
 )
 
 _ rhs(op leftType) (
@@ -559,23 +616,12 @@ _ expr() (
 )
 
 
-_ emitExtern(function) (
- ; extern (function)
- ptwo(EXTERN function) $10
- ; sub rsp, 32
- ptwo(SUB RSP) $10
- call(function)
- ; add rsp, 32
- ptwo(ADD RSP) $10
-)
-
-
-
 ;; Data segment
 aDATA%1000 ndata=0 ; # of bytes of data
-
-
 intFmtAdded=false
+
+;; Hash codes of global data names
+aHASHES%100 nhashes=0
 
 _ vaddData(asource start end) (
   i=start
@@ -607,8 +653,6 @@ _ hash(astring) (
   ^r
 )
 
-aHASHES%1000 nhashes=0
-
 _ globalExists(aname) (
   thehash=hash(aname)
   i=0 ~(i<nhashes) (
@@ -622,10 +666,9 @@ _ globalExists(aname) (
 )
 
 
-; add a global with the given name and type (int or array)
+; Add a global with the given name and type (int or array)
 _ vaddGlobal(aname type) (
-
-  ~ (globalExists(aname)=false) (
+  ? (globalExists(aname)=false) (
     ; add _(name)
     aDATA[ndata]='_ ndata=ndata+1
     i=0 ~(aname[i]!0) (aDATA[ndata]=aname[i] i=i+1 ndata=ndata+1)
@@ -635,6 +678,9 @@ _ vaddGlobal(aname type) (
   )
 )
 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Parse statements
 
 _ parsePrint() (
   printch = (atoken[1]=PRINTCH)
@@ -667,18 +713,6 @@ _ parseStop() (
   call(EXIT)
   ^0
 )
-
-id=0
-
-_ nextLabel() (
-  id=id+1
-  ^ id
-)
-
-_ emitLabel(labelid)  (
-  $'L #labelid $': $10
-)
-
 
 _ parseIf() (
   expectSymbol(IF)
@@ -745,8 +779,9 @@ _ startsWithSymbol() (
   ? ( atoken[1]=PRINTCH | atoken[1]=PRINTINT) ( ^parsePrint() )
   ? ( atoken[1]=STOP) ( ^parseStop() )
   ? ( atoken[1]=WHILE) ( ^parseWhile() )
-  ; TODO if ^ ret
-  ; TODO if _ define proc
+
+  ; TODO ^ ret
+  ; TODO _ define proc
   $'s $'w $'s fail(atoken)
 )
 
@@ -787,6 +822,7 @@ _ parse() (
   ; $'; printstr(ainput 0)
 
   vadvanceLexer() ; prime the lexer
+  vadvance() ; prime the parser
 
   ; global main
   printstr(as HEADER) $10
@@ -795,11 +831,11 @@ _ parse() (
 
   printstr(as MAIN) $': $10
 
-  vadvance() ; prime the parser
-
   statements()
 
+  ; call exit
   emitExtern(EXIT)
+  ; ret
   $'r $'e $'t $10
 
   ? (ndata!0) (
