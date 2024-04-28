@@ -242,7 +242,18 @@ as[j]='r j=j+2 XCHG=j
 as[j]='x j=j+1
 as[j]='c j=j+1
 as[j]='h j=j+1
-as[j]='g j=j+2
+as[j]='g j=j+2 CALLOC=j
+as[j]='c j=j+1
+as[j]='a j=j+1
+as[j]='l j=j+1
+as[j]='l j=j+1
+as[j]='o j=j+1
+as[j]='c j=j+2 GLOBALDQ=j
+as[j]=': j=j+1
+as[j]='d j=j+1
+as[j]='q j=j+1
+as[j]=32 j=j+1
+as[j]='0 j=j+2
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -421,8 +432,8 @@ _ nextLabel() (
 )
 
 _ vadvance() (
-  atoken = aNextToken()
   $'; $32 printToken(atoken)
+  atoken = aNextToken()
 )
 
 
@@ -667,14 +678,16 @@ _ globalExists(aname) (
 
 
 ; Add a global with the given name and type (int or array)
-_ vaddGlobal(aname type) (
+_ vaddGlobal(aname) (
+
   ? (globalExists(aname)=false) (
     ; add _(name)
     aDATA[ndata]='_ ndata=ndata+1
     i=0 ~(aname[i]!0) (aDATA[ndata]=aname[i] i=i+1 ndata=ndata+1)
 
-    ; add :dd 0 TODO If array use dq not dd
-    vaddData(as GLOBALDD 99999999)
+    ; add :dd 0 or :dq 0
+    ? (aname[0]='a | aname[0]='A) ( vaddData(as GLOBALDQ 99999999) )
+    : (vaddData(as GLOBALDD 99999999))
   )
 )
 
@@ -755,7 +768,7 @@ _ parseWhile() (
   endLabel = nextLabel()
   emitLabel(startLabel)
 
-  stopType = expr() ; TODO: check type
+  stopType = expr()
 
   ; cmp al, 0
   ptwo(CMP ALCOMMAZERO) $10
@@ -789,16 +802,36 @@ _ startsWithSymbol() (
 _ parseAssign(avarname) (
   vadvance() ; eat the =
   expr()
-  ; TODO: get the offset of this variable
-  vaddGlobal(avarname 0)
+
+  vaddGlobal(avarname)
+  ; TODO: look up the offset of this variable in the current symbol table
   mov() printVar(avarname 0) $', reg(EAX) $10
+)
+
+_ parseAllocArray(avarname) (
+  vaddGlobal(avarname)
+  vadvance() ; eat the %
+  expr() 
+
+  ; emit("imul EAX, 4")
+  pone(IMUL) reg(EAX) $', #4 $10
+  ; emit("mov ECX, EAX")
+  xfer(ECX EAX)
+  ; emit("mov EDX, 1")
+  mov() reg(EDX) $', #1 $10
+  ; emitExtern("calloc")
+  emitExtern(CALLOC)
+
+  ;emit(s"mov ${sym.location()}, RAX")
+  mov() printVar(avarname 0) $', reg(RAX) $10
 )
 
 
 _ startsWithVar() (
   aname=acopyValue()
   vadvance()
-  ? (atoken[0]=SYM & atoken[1]='=) (parseAssign(aname))
+  ? (isSymbol(EQ)) ( ^parseAssign(aname) )
+  ? (isSymbol(LENGTH)) ( ^parseAllocArray(aname) )
   ; TODO: if ( do function call
   ; TODO: if [ do array set
 )
