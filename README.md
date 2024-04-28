@@ -7,18 +7,19 @@
 
 For fun. Design considerations:
 
+* Define the smallest possible (high-level) language that can compile itself.
 * As simple as possible, but no simpler.
-* All keywords and symbols are single-character non-alphanumerics, to make the lexical analyzer easier. Some symbols (e.g., `>`) have been omitted. Just use `<` instead.
-* No strings, structs, floats, bytes, or bools.
-* The only two data types are ints (32-bits) and arrays of ints)
+* All keywords and symbols are single-character non-alphanumerics. Some symbols (e.g., `>`) have been omitted. Just use `<` instead.
+* No strings, structs, floats, bytes, or booleans. Well...strings can be represented as arrays, and booleans can be represented as ints.
+* The only data types are ints (32-bits) and arrays of ints.
  
-## Symbols/Keywords
+## Keywords (Symbols)
 
-`;` - comment
+`;` - comment to end of line
 
-`$` - print as character
+`$` - print the (int) argument as a character
 
-`#` - print as integer
+`#` - print the (int) argument as an integer
 
 `~` - while
 
@@ -30,25 +31,38 @@ For fun. Design considerations:
 
 `_` - define function
 
-`%` - define  array size
+`%` - allocate array 
 
 `'` - character constant (really just an int)
+
+`\` - stop/exit
 
 And the usual math: `+ - * ( ) [ ] & | ! = <`
 
 Note: `=` is used for both assignment and comparison. `!` is the "not equals" comparison.
 
-There is no division or `>` or `>=` or `<=`.
+There is no division or modulo or `>` or `>=` or `<=`.
 
 Blocks are separated with parentheses.
+
+
+## Data types
+
+There are two data types: 32-bit ints and arrays of 32-bit ints.
+
+When comparing ints, the result is an int (0 for false, 1 for true.)
 
 
 ## Variables
 
 Variables that start with `a` are arrays of ints. All other variables are ints.
 
-Only alphabetic characters are allowed in variable names. Variable and function
+Only *alphabetic characters* are allowed in variable names. Variable and function
 names are *case-sensitive*.
+
+Variables can be defined outside functions and are then global for all functions
+to read and modify.
+
 
 ## Arrays
 
@@ -81,13 +95,22 @@ arr[2] = 34
 arr[3] = 0
 ```
 
+The following line is equivalent to `if arr[i] == 0 { println("Empty") }`:
+
 ```
-? arr[i] = 0 ( $'E $'m $'p $'t $'y $10 )  ; if arr[i] == 0 { println("Empty")}
+? (arr[i]=0) ( $'E $'m $'p $'t $'y $10 )
 ```
+
+### Length
+
+There is no "array length" operator.
+
 
 ## Functions
 
 ### Naming
+
+Only alphabetic characters are allowed in function names.
 
 Functions that start with `v` are void. Functions that start with `a` return an array.
 All other functions return int.
@@ -108,11 +131,10 @@ Print an array as a string:
 ```
 _vprint(as) (
   i=0
-  ~ as[i] ! 0 (   ; while as[i] != 0
+  ~ (as[i] ! 0) (   ; while as[i] != 0
     $ as[i]       ; print as[i] as a character
     i=i+1
   )
 )
 ```
-
 
