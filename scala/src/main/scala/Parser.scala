@@ -19,10 +19,21 @@ class Parser(
     SymbolType.And -> List("and EAX, EBX"),
     SymbolType.Or -> List("or EAX, EBX"),
     SymbolType.Minus -> List("xchg EAX, EBX", "sub EAX, EBX"),
-    SymbolType.Eq -> List("cmp EBX, EAX", "setz AL"),
-    SymbolType.Neq -> List("cmp EBX, EAX", "setnz AL"),
-    SymbolType.Lt -> List("cmp EBX, EAX", "setl AL"),
+    // AND with 0xff to clear out the upper part of the register
+    SymbolType.Eq -> List("cmp EBX, EAX", "setz AL", "and EAX, 0xff"),
+    SymbolType.Neq -> List("cmp EBX, EAX", "setnz AL", "and EAX, 0xff"),
+    SymbolType.Lt -> List("cmp EBX, EAX", "setl AL", "and EAX, 0xff"),
     ),
+  private val PRECEDENCES: List[SymbolType] = 
+    List(
+      SymbolType.Mult,
+      SymbolType.Minus,
+      SymbolType.Plus,
+      SymbolType.Lt,
+      SymbolType.Neq,
+      SymbolType.Eq ,
+      SymbolType.And,
+      SymbolType.Or),
 
   private var _token: Token = null,
   private var _id: Int = 0,
@@ -315,7 +326,7 @@ class Parser(
     emit(s"jmp $startWhileLabel")
     emitLabel(endWhileLabel)
 
-  private def expr(): VarType = boolOr()
+  private def expr(): VarType = exprLevel(PRECEDENCES.length-1)
 
   private def rhs(leftType: VarType, rightType: VarType, op: SymbolType): Unit =
     checkTypes(leftType, rightType, s"operand to $op")
@@ -324,56 +335,18 @@ class Parser(
     for line <- opcode.get do
       emit(line)
 
-  private def boolOr(): VarType =
-    val leftType = boolAnd()
-    while _token.isSymbol(SymbolType.Or) do
-      val op = _token.symbolType()
-      advance()
-      emit("push RAX")
-      val rightType = boolAnd()
-      rhs(leftType, rightType, op)
-    leftType
-
-  private def boolAnd(): VarType =
-    val leftType = compare()
-    while _token.isSymbol(SymbolType.And) do
-      val op = _token.symbolType()
-      advance()
-      emit("push RAX")
-      val rightType = compare()
-      rhs(leftType, rightType, op)
-    leftType
-
-  private def compare(): VarType =
-    val leftType = addSub()
-    while _token.isSymbol(SymbolType.Eq) || _token.isSymbol(SymbolType.Neq) || _token.isSymbol(SymbolType.Lt) do
-      val op = _token.symbolType()
-      advance()
-      emit("push RAX")
-      val rightType = addSub()
-      rhs(leftType, rightType, op)
-    leftType
-
-  private def addSub(): VarType =
-    val leftType = mult()
-    while _token.isSymbol(SymbolType.Plus) || _token.isSymbol(SymbolType.Minus) do
-      val op = _token.symbolType()
-      advance()
-      emit("push RAX")
-      val rightType = mult()
-      checkTypes(leftType, rightType, s"operand to $op")
-      rhs(leftType, rightType, op)
-    leftType
-
-  private def mult(): VarType =
-    val leftType = atom()
-    while _token.isSymbol(SymbolType.Mult) do
-      val op = _token.symbolType()
-      advance()
-      emit("push RAX")
-      val rightType = atom()
-      rhs(leftType, rightType, op)
-    leftType
+  private def exprLevel(level: Int): VarType = 
+    if level == -1 then
+      atom()
+    else
+      val leftType = exprLevel(level-1)
+      val op = PRECEDENCES(level)
+      while (_token.isSymbol(op)) do
+        advance()
+        emit("push RAX")
+        val rightType = exprLevel(level-1)
+        rhs(leftType, rightType, op)
+      leftType
 
   private def atom(): VarType =
     _token.tokenType() match

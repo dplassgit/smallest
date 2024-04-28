@@ -1,5 +1,7 @@
+set -x
 BASE=`basename -s .spl $1`
 
 scripts/compile $1
 
+echo -n
 test -x $BASE.exe && ./$BASE.exe

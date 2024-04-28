@@ -1,3 +1,4 @@
+set -x
 BASE=`basename -s .spl $1`
 rm -f $BASE.exe $BASE.obj $BASE.asm
 

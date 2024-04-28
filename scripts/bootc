@@ -1,3 +1,4 @@
+set -x
 # compile the compiler 
 scripts/compile src/bootstrap.spl
 

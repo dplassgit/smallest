@@ -220,8 +220,16 @@ as[j]='s j=j+1
 as[j]='e j=j+1
 as[j]='t j=j+1
 as[j]='n j=j+1
-as[j]='z j=j+2
-
+as[j]='z j=j+2 ANDOP=j
+as[j]='a j=j+1
+as[j]='n j=j+1
+as[j]='d j=j+2 OROP=j
+as[j]='o j=j+1
+as[j]='r j=j+2 XCHG=j
+as[j]='x j=j+1
+as[j]='c j=j+1
+as[j]='h j=j+1
+as[j]='g j=j+2
 
 
 ;; Printing
@@ -255,16 +263,9 @@ _ printToken(at) (
   $10
 )
 
-atoken%1 ; this allocation will get thrown away
-
-_ fail() (
-  ptwo(BAD TOKEN) $': $32 printToken(atoken)
+_ fail(at) (
+  ptwo(BAD TOKEN) $': $32 printToken(at)
   \ ; exit now
-)
-
-_ printVar(avarname offset) (
-  ? (offset=0) ( $'[ $'_ printstr(avarname 0) $'])
-  : ($'p $'v fail())
 )
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -387,9 +388,19 @@ _ printtokens() (
 ; PARSER
 
 
+; Global
+atoken%1 ; this allocation will get thrown away
+
+
 _ vadvance() (
   atoken = aNextToken()
   $'; $32 printToken(atoken)
+)
+
+; print variable with the given offset. 0 offset=global
+_ printVar(avarname offset) (
+  ? (offset=0) ( $'[ $'_ printstr(avarname 0) $'])
+  : ($'p $'v fail(atoken))
 )
 
 
@@ -421,6 +432,14 @@ _ xfer(dest src) (
   mov() reg(dest) $', reg(src) $10
 )
 
+_ push(register) (
+  pone(PUSH) reg(register) $10
+)
+
+_ pop(register) (
+  pone(POP) reg(register) $10
+)
+
 VARTYPEINT=1
 VARTYPEARR=2
 
@@ -448,7 +467,15 @@ _ parseAtom() (
     mov() reg(EAX) $', printVar(avar 0) $10
     ^VARTYPEINT
   )
-  : ( $'a $'t $'o $'m fail() )
+
+  ? (isSymbol(OPENPAREN)) (
+    expectSymbol(OPENPAREN)
+    varType = expr()
+    expectSymbol(CLOSEPAREN)
+    ^varType
+  )
+
+  : ( $'a $'t $'o $'m fail(atoken) )
   ^0
 )
 
@@ -458,65 +485,77 @@ _ isSymbol(s) (
 
 _ expectSymbol(s) (
   ? (isSymbol(s)=true) ( vadvance() )
-  : ( pone(EXPECTED) $s $32 $'s $'a $'w $32 $atoken[1] $10 fail())
+  : ( pone(EXPECTED) $s $32 $'s $'a $'w $32 $atoken[1] $10 fail(atoken))
 )
 
-_ isMathSymbol() (
-  ^ (isSymbol(PLUS) | isSymbol(MULT) | isSymbol(EQ) | isSymbol(NEQ) |
-    isSymbol(LT))
-)
-
-
-_ expr() (
-
-  ? ( isSymbol(OPENPAREN)=true ) (
-    expectSymbol(OPENPAREN)
-    type = expr()
-    expectSymbol(CLOSEPAREN)
-    ^type
-  )
-  : (
-    leftType = parseAtom()
-
-    ; if good symbol
-    ? (isMathSymbol()=true) (
-      ; save symbol
-      symbol = atoken[1]
-
-      vadvance()
-      ; push rax
-      pone(PUSH) reg(RAX) $10
-      rightType = parseAtom()
-      ; pop rbx
-      pone(POP) reg(RBX) $10
-
-      ; emit the code for the symbol
-      ? (symbol=PLUS) ( pone(ADD) reg(RAX) $', reg(RBX) $10 ^leftType)
-      ? (symbol=MULT) ( pone(IMUL) reg(RAX) $', reg(RBX) $10 ^leftType)
-      ? (symbol=EQ) (
-        ; cmp EBX, EAX, setz AL
-        pone(CMP) reg(RBX) $', reg(RAX) $10
-        pone(SETZ) $'A $'L $10
-        ^leftType
-      )
-      ? (symbol=NEQ) (
-        ; cmp EBX, EAX, setnz AL
-        pone(CMP) reg(RBX) $', reg(RAX) $10
-        pone(SETNZ) $'A $'L $10
-        ^leftType
-      )
-      ? (symbol=LT) (
-        ; cmp EBX, EAX, setl AL
-        pone(CMP) reg(RBX) $', reg(RAX) $10
-        pone(SETL) $'A $'L $10
-        ^leftType
-      )
-      $'U $'n ptwo(EXPECTED SYMBOL) $symbol $10
-      fail()
-    )
-
+_ rhs(op leftType) (
+  pop(RBX)
+  ? (op=PLUS) ( pone(ADD) reg(EAX) $', reg(EBX) $10 ^leftType)
+  ? (op=MULT) ( pone(IMUL) reg(EAX) $', reg(EBX) $10 ^leftType)
+  ? (op=AND) ( pone(ANDOP) reg(EAX) $', reg(EBX) $10 ^leftType)
+  ? (op=OR) ( pone(OROP) reg(EAX) $', reg(EBX) $10 ^leftType)
+  ? (op=EQ) (
+    ; cmp EBX, EAX
+    ; setz AL
+    ; and rax, 15
+    pone(CMP) reg(EBX) $', reg(EAX) $10
+    pone(SETZ) $'A $'L $10
+    pone(ANDOP) reg(EAX) $', #15 $10
     ^leftType
   )
+  ? (op=NEQ) (
+    ; cmp EBX, EAX
+    ; setnz AL
+    ; and rax, 15
+    pone(CMP) reg(EBX) $', reg(EAX) $10
+    pone(SETNZ) $'A $'L $10
+    pone(ANDOP) reg(EAX) $', #15 $10
+    ^leftType
+  )
+  ? (op=LT) (
+    ; cmp EBX, EAX
+    ; setl AL
+    ; and rax, 15
+    pone(CMP) reg(EBX) $', reg(EAX) $10
+    pone(SETL) $'A $'L $10
+    pone(ANDOP) reg(EAX) $', #15 $10
+    ^leftType
+  )
+  ? (op=MINUS) (
+    ; xchg EAX, EBX
+    ; sub EAX, EBX
+    pone(XCHG) reg(EAX) $', reg(EBX) $10
+    pone(SUB) reg(EAX) $', reg(EBX) $10
+    ^leftType
+  )
+  $'U $'n ptwo(EXPECTED SYMBOL) $op $10 fail(atoken)
+)
+
+aPREC%8 j=0
+aPREC[j]=MULT j=j+1
+aPREC[j]=MINUS j=j+1
+aPREC[j]=PLUS j=j+1
+aPREC[j]=LT j=j+1
+aPREC[j]=NEQ j=j+1
+aPREC[j]=EQ j=j+1
+aPREC[j]=AND j=j+1
+aPREC[j]=OR
+
+_ exprLevel(level) (
+  ? (level<0) ( ^parseAtom() )
+  leftType = exprLevel(level-1)
+  op = aPREC[level]
+  ~ (isSymbol(op)) (
+    vadvance()
+    push(RAX)
+    rightType = exprLevel(level - 1)
+    rhs(op leftType)
+  )
+  ^leftType
+)
+
+_ expr() (
+  ^exprLevel(7)
 )
 
 
@@ -708,7 +747,7 @@ _ startsWithSymbol() (
   ? ( atoken[1]=WHILE) ( ^parseWhile() )
   ; TODO if ^ ret
   ; TODO if _ define proc
-  $'s $'w $'s fail()
+  $'s $'w $'s fail(atoken)
 )
 
 
@@ -734,7 +773,7 @@ _ statement() (
   ? (atoken[0]=SYM) ( ^startsWithSymbol() )
   ? (atoken[0]=VAR) ( ^startsWithVar() )
   ? (atoken[0]=EOF) ( ^0 )
-  $'s fail()
+  $'s fail(atoken)
 )
 
 
