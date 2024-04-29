@@ -156,13 +156,7 @@ as[j]='r j=j+1
 as[j]='n j=j+2 SUB=j
 as[j]='s j=j+1
 as[j]='u j=j+1
-as[j]='b j=j+2 RSP=j
-as[j]='R j=j+1
-as[j]='S j=j+1
-as[j]='P j=j+1
-as[j]=', j=j+1
-as[j]='3 j=j+1
-as[j]='2 j=j+2 ADD=j
+as[j]='b j=j+2 ADD=j
 as[j]='a j=j+1
 as[j]='d j=j+1
 as[j]='d j=j+2 CALL=j
@@ -286,6 +280,7 @@ _ ptwo(first second) (
 ; Print the given token (for debugging)
 _ printToken(at) (
   ? (at[0]=CONST) ( $'c $': $32 printstr(at 1) )
+  ? (at[0]=CHARCONST) ( $'c $'c $': $32 $'' $at[1] )
   ? (at[0]=VAR) ( $'v $': $32 printstr(at 1) )
   ? (at[0]=SYM) ( $'s $': $32 $at[1])
   ? (at[0]=ERROR) ( $'!)
@@ -432,7 +427,7 @@ _ nextLabel() (
 )
 
 _ vadvance() (
-  $'; $32 printToken(atoken)
+  ; $'; $32 printToken(atoken)
   atoken = aNextToken()
 )
 
@@ -446,42 +441,16 @@ _ printVar(avarname offset) (
   : ($'p $'v fail(atoken))
 )
 
-
-_ call(start) (
-  ptwo(CALL start) $10
-)
-
-_ emitExtern(function) (
- ; extern (function)
- ptwo(EXTERN function) $10
- ; sub rsp, 32
- ptwo(SUB RSP) $10
- call(function)
- ; add rsp, 32
- ptwo(ADD RSP) $10
-)
-
-_ emitLabel(labelid)  (
-  $'L #labelid $': $10
-)
-
-
-; Copy the value of the token into a new array.
-_ acopyValue() (
-  i=0 ~(atoken[i+1]!0) (i=i+1)
-  adest%(i+1)
-  i=1 ~(atoken[i]!0 & i<20) (adest[i-1]=atoken[i] i=i+1)
-  ^adest
-)
-
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Registers
 
 RAX=0 RBX=1 RCX=2 RDX=3
 EAX=4 EBX=5 ECX=6 EDX=7
+RBP=8 RSP=9
 
 _ reg(index) (
+  ? (index=RBP) ( $'R $'B $'P ^0)
+  ? (index=RSP) ( $'R $'S $'P ^0)
   ? (index<EAX) ( $'R $(index+'A))
   : ( $'E $((index-EAX)+'A))
   $'X
@@ -502,43 +471,96 @@ _ pop(register) (
 )
 
 
+_ call(start) (
+  ptwo(CALL start) $10
+)
+
+_ emitExtern(function) (
+ ; extern (function)
+ ptwo(EXTERN function) $10
+ ; sub rsp, 32
+ pone(SUB) reg(RSP) $', #32 $10
+ call(function)
+ ; add rsp, 32
+ pone(ADD) reg(RSP) $', #32 $10
+)
+
+_ emitLabel(labelid)  (
+  $'L #labelid $': $10
+)
+
+
+; Copy the value of the token into a new array.
+_ acopyValue() (
+  i=0 ~(atoken[i+1]!0) (i=i+1)
+  adest%(i+1)
+  i=1 ~(atoken[i]!0 & i<20) (adest[i-1]=atoken[i] i=i+1)
+  ^adest
+)
+
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Var types
-VARTYPEINT=1
-VARTYPEARR=2
+VarTypeInt=1
+VarTypeArr=2
 
 
 _ expectSymbol(s) (
-  ? (isSymbol(s)=true) ( vadvance() )
-  : ( pone(EXPECTED) $s $32 $'s $'a $'w $32 $atoken[1] $10 fail(atoken))
+  ? (isSymbol(s)=true) ( vadvance() ^0 )
+  pone(EXPECTED) $s $32 $'s $'a $'w $32 $atoken[1] $10 
+  fail(atoken)
 )
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Expression parsing
+
+_ parseArrayGet(avarname) (
+  ; TODO: look up variable, make sure it's an array
+
+  expectSymbol(OPENBRACKET)
+  expr()  ; TODO: make sure it's an int
+  expectSymbol(CLOSEBRACKET)
+
+  ; emit("imul EAX, 4  ; from index to offset")
+  pone(IMUL) reg(EAX) $', #4 $10
+
+  ; TODO: look up the offset of this variable in the current symbol table
+  ; add RAX, ${sym.get.location()}
+  pone(ADD) reg(RAX) $', printVar(avarname 0) $10
+
+  ; mov EAX, [RAX]
+  mov() reg(EAX) $', $'[ reg(RAX) $'] $10
+  ^VarTypeInt
+)
 
 _ parseAtom() (
   ? (atoken[0]=CONST) (
     mov() reg(EAX) $', printstr(atoken 1) $10
 
     vadvance()
-    ^VARTYPEINT
+    ^VarTypeInt
   )
 
   ? (atoken[0]=CHARCONST) (
     ; print as a number
-    mov() reg(EAX) $', #(atoken[1]) $10
+    mov() reg(EAX) $', #atoken[1] $10
 
     vadvance()
-    ^VARTYPEINT
+    ^VarTypeInt
   )
   ? (atoken[0]=VAR) (
     avar = acopyValue()
+    ; TODO: LOOK UP variable and make sure it exists!
     vadvance()
-    ; TODO: if [ do array dereference
+
+    ; if [ do array dereference
+    ? (isSymbol(OPENBRACKET)) (^parseArrayGet(avar))
     ; TODO: if ( do function call
     ; TODO: infer variable type and use RAX if array
+    ; TODO: look up the offset of this variable in the current symbol table
     mov() reg(EAX) $', printVar(avar 0) $10
-    ^VARTYPEINT
+    ^VarTypeInt
   )
 
   ? (isSymbol(OPENPAREN)) (
@@ -679,7 +701,6 @@ _ globalExists(aname) (
 
 ; Add a global with the given name and type (int or array)
 _ vaddGlobal(aname) (
-
   ? (globalExists(aname)=false) (
     ; add _(name)
     aDATA[ndata]='_ ndata=ndata+1
@@ -727,6 +748,10 @@ _ parseStop() (
   ^0
 )
 
+_ jmp(label) (
+  pone(JMP) $'L #label $10
+)
+
 _ parseIf() (
   expectSymbol(IF)
   exprType = expr()
@@ -744,9 +769,10 @@ _ parseIf() (
     statement()
   )
   expectSymbol(CLOSEPAREN)
+
   hasElse = isSymbol(ELSE)
   ? (hasElse) (
-    pone(JMP) $'L #endIfLabel $10
+    jmp(endIfLabel)
   )
   emitLabel(elseLabel)
 
@@ -759,6 +785,7 @@ _ parseIf() (
     expectSymbol(CLOSEPAREN)
     emitLabel(endIfLabel)
   )
+  ^0
 )
 
 _ parseWhile() (
@@ -782,8 +809,54 @@ _ parseWhile() (
   expectSymbol(CLOSEPAREN)
 
   ; jmp Lend
-  pone(JMP) $'L #startLabel $10
+  jmp(startLabel)
   emitLabel(endLabel)
+)
+
+_ strLabel(aname) (
+  $'_ printstr(aname 0) $': $10
+)
+
+_ defineProc() (
+  expectSymbol(PROCDEF)
+  aname=acopyValue()
+  vadvance()
+  labelAfterProc = nextLabel()
+  jmp(labelAfterProc)
+  strLabel(aname)
+
+  push(RBP)
+  mov() reg(RBP) $', reg(RSP) $10
+
+  ; We won't be counting locals, because reasons.
+  ; sub RSP, ${locals*8}
+  ; allocate 96 bytes for loals.
+  pone(SUB) reg(RSP) $', #96 $10
+
+  ; TODO: start a new symbol table
+
+  offset=8
+  expectSymbol(OPENPAREN)
+  ~(isSymbol(CLOSEPAREN)=false & atoken[0]!EOF) (
+    ; TODO: register param name and offset
+    ? (atoken[0]!VAR) ( fail(atoken) ^0 ) 
+    : ( vadvance() )
+  )
+  expectSymbol(CLOSEPAREN)
+
+  ; TODO: declare proc. should fail if already exists
+
+  expectSymbol(OPENPAREN)
+  ~ (atoken[0]!EOF & isSymbol(CLOSEPAREN)=false) (
+    statement()
+  )
+  expectSymbol(CLOSEPAREN)
+  $'_ $'e $'n $'d strLabel(aname)
+  mov() reg(RSP) $', reg(RBP) $10
+  pop(RBP)
+  $'r $'e $'t $10
+
+  emitLabel(labelAfterProc)
 )
 
 
@@ -792,14 +865,15 @@ _ startsWithSymbol() (
   ? ( atoken[1]=PRINTCH | atoken[1]=PRINTINT) ( ^parsePrint() )
   ? ( atoken[1]=STOP) ( ^parseStop() )
   ? ( atoken[1]=WHILE) ( ^parseWhile() )
+  ; if starts with _, function declaration
+  ? ( atoken[1]=PROCDEF) ( ^defineProc() )
 
   ; TODO ^ ret
-  ; TODO _ define proc
   $'s $'w $'s fail(atoken)
 )
 
 
-_ parseAssign(avarname) (
+_ varAssignment(avarname) (
   vadvance() ; eat the =
   expr()
 
@@ -809,6 +883,8 @@ _ parseAssign(avarname) (
 )
 
 _ parseAllocArray(avarname) (
+  ; TODO: do not add as global if not in global scope unless
+  ; it is already defined in global scope
   vaddGlobal(avarname)
   vadvance() ; eat the %
   expr() 
@@ -823,17 +899,44 @@ _ parseAllocArray(avarname) (
   emitExtern(CALLOC)
 
   ;emit(s"mov ${sym.location()}, RAX")
+  ; TODO: look up the offset of this variable in the current symbol table
   mov() printVar(avarname 0) $', reg(RAX) $10
+)
+
+
+_ parseArraySet(avarname) (
+  ; TODO: make sure array exists
+
+  expectSymbol(OPENBRACKET)
+  indexType = expr()   ; TODO check return type
+  expectSymbol(CLOSEBRACKET)
+
+  expectSymbol(EQ)
+
+  ; emit("imul EAX, 4  ; from index to offset")
+  pone(IMUL) reg(EAX) $', #4 $10
+  ; emit(s"add RAX, ${sym.get.location()}  ; absolute location")
+  ; TODO: look up the offset of this variable in the current symbol table
+  pone(ADD) reg(RAX) $', printVar(avarname 0) $10
+  ; emit("push RAX  ; array location")
+  push(RAX)
+
+  exprType = expr()
+
+  pop(RBX)
+  ; emit("mov DWORD [RBX], EAX  ; assign array location")
+  mov() $'[ reg(RBX) $'] $', reg(EAX) $10
 )
 
 
 _ startsWithVar() (
   aname=acopyValue()
   vadvance()
-  ? (isSymbol(EQ)) ( ^parseAssign(aname) )
+  ? (isSymbol(EQ)) ( varAssignment(aname) )
   ? (isSymbol(LENGTH)) ( ^parseAllocArray(aname) )
+  ? (isSymbol(OPENBRACKET)) ( ^parseArraySet(aname) )
+
   ; TODO: if ( do function call
-  ; TODO: if [ do array set
 )
 
 

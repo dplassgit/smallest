@@ -140,7 +140,7 @@ class Parser(
     _token.symbolType() match
       case SymbolType.Eq => varAssignment(name)
       case SymbolType.Length => allocateArray(name)
-      case SymbolType.OpenBracket => arrayAssignment(name)
+      case SymbolType.OpenBracket => arraySet(name)
       case SymbolType.OpenParen => voidProcCall(name)
       case SymbolType.Input => input(name)
       case _ => {}
@@ -227,7 +227,7 @@ class Parser(
     emitExtern("calloc")
     emit(s"mov ${sym.location()}, RAX  ; set ${sym.name()}")
 
-  private def arrayAssignment(name: String): Unit =
+  private def arraySet(name: String): Unit =
     val sym = _symTab.lookupVar(name)
     if sym == None then
       fail(s"Array $name not declared yet")
