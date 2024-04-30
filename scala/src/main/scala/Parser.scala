@@ -61,6 +61,7 @@ class Parser(
 
   private def advance(): Unit =
     _token = _lexer.nextToken()
+    // println(_token)
 
   private def statements(): Unit =
     while _token.tokenType() != TokenType.EndOfFile do

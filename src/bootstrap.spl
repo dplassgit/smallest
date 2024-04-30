@@ -247,7 +247,40 @@ as[j]=': j=j+1
 as[j]='d j=j+1
 as[j]='q j=j+1
 as[j]=32 j=j+1
-as[j]='0 j=j+2
+as[j]='0 j=j+2 DUPLICATE=j
+as[j]='D j=j+1
+as[j]='u j=j+1
+as[j]='p j=j+1
+as[j]='l j=j+1
+as[j]='i j=j+1
+as[j]='c j=j+1
+as[j]='a j=j+1
+as[j]='t j=j+1
+as[j]='e j=j+2 PARAM=j
+as[j]='P j=j+1
+as[j]='a j=j+1
+as[j]='r j=j+1
+as[j]='a j=j+1
+as[j]='m j=j+2
+as[j]='P j=j+1 PROC=j
+as[j]='r j=j+1
+as[j]='o j=j+1
+as[j]='c j=j+2 ALREADY=j
+as[j]='A j=j+1 
+as[j]='l j=j+1
+as[j]='r j=j+1
+as[j]='e j=j+1
+as[j]='a j=j+1
+as[j]='d j=j+1
+as[j]='y j=j+2 TOOMANY=j
+as[j]='T j=j+1
+as[j]='o j=j+1
+as[j]='o j=j+1
+as[j]=32 j=j+1
+as[j]='m j=j+1
+as[j]='a j=j+1
+as[j]='n j=j+1
+as[j]='y j=j+2
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -448,11 +481,11 @@ RAX=0 RBX=1 RCX=2 RDX=3
 EAX=4 EBX=5 ECX=6 EDX=7
 RBP=8 RSP=9
 
-_ reg(index) (
-  ? (index=RBP) ( $'R $'B $'P ^0)
-  ? (index=RSP) ( $'R $'S $'P ^0)
-  ? (index<EAX) ( $'R $(index+'A))
-  : ( $'E $((index-EAX)+'A))
+_ reg(name) (
+  ? (name=RBP) ( $'R $'B $'P ^0)
+  ? (name=RSP) ( $'R $'S $'P ^0)
+  ? (name<EAX) ( $'R $(name+'A))
+  : ( $'E $(name-EAX+'A))
   $'X
 )
 
@@ -515,8 +548,22 @@ _ expectSymbol(s) (
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Expression parsing
 
+_ inferVarType(first) (
+  ?(first='a | first='A) (^VarTypeArr)
+  ^VarTypeInt
+)
+
+_ getDestReg(first) (
+  ?(first='a | first='A) (^RAX)
+  ^EAX
+)
+
 _ parseArrayGet(avarname) (
-  ; TODO: look up variable, make sure it's an array
+  varType = inferVarType(avarname[0])
+  ? (varType!VarTypeArr) (
+    ; Not array
+    $'N $'A fail(atoken) ^0
+  )
 
   expectSymbol(OPENBRACKET)
   expr()  ; TODO: make sure it's an int
@@ -534,21 +581,21 @@ _ parseArrayGet(avarname) (
   ^VarTypeInt
 )
 
+INDEXNOTFOUND=9999
+
 _ parseAtom() (
   ? (atoken[0]=CONST) (
     mov() reg(EAX) $', printstr(atoken 1) $10
-
     vadvance()
     ^VarTypeInt
   )
-
   ? (atoken[0]=CHARCONST) (
     ; print as a number
     mov() reg(EAX) $', #atoken[1] $10
-
     vadvance()
     ^VarTypeInt
   )
+
   ? (atoken[0]=VAR) (
     avar = acopyValue()
     ; TODO: LOOK UP variable and make sure it exists!
@@ -556,11 +603,22 @@ _ parseAtom() (
 
     ; if [ do array dereference
     ? (isSymbol(OPENBRACKET)) (^parseArrayGet(avar))
+
     ; TODO: if ( do function call
-    ; TODO: infer variable type and use RAX if array
-    ; TODO: look up the offset of this variable in the current symbol table
-    mov() reg(EAX) $', printVar(avar 0) $10
-    ^VarTypeInt
+
+    ; use RAX if array
+    destReg=getDestReg(avar[0])
+
+    ; look up the offset of this variable in the current symbol table
+    paramIndex = lookupParamIndex(avar)
+    ? (paramIndex!INDEXNOTFOUND) (
+      mov() reg(destReg) $', 
+        $'[ reg(RBP) $'+ #((paramIndex+1)*8) $'] $10
+    )
+    ; TODO: lookup local
+    : ( mov() reg(destReg) $', printVar(avar 0) $10 )
+
+    ^(inferVarType(avar[0]))
   )
 
   ? (isSymbol(OPENPAREN)) (
@@ -654,7 +712,7 @@ aDATA%1000 ndata=0 ; # of bytes of data
 intFmtAdded=false
 
 ;; Hash codes of global data names
-aHASHES%100 nhashes=0
+aGlobals%100 nhashes=0
 
 _ vaddData(asource start end) (
   i=start
@@ -686,18 +744,33 @@ _ hash(astring) (
   ^r
 )
 
-_ globalExists(aname) (
-  thehash=hash(aname)
-  i=0 ~(i<nhashes) (
-    ?(aHASHES[i]=thehash) (^true) ; found
-    i=i+1
-  )
-  ; not found, add to the end
-  aHASHES[nhashes]=thehash
-  nhashes=nhashes+1
-  ^false
+; returns true if found, false if not
+; if not found, adds to the end
+_ lookupAndAdd(avalue atable) (
+  ? (lookupByHash(avalue atable)=false) (
+    ; not found, add to the end
+    thehash=hash(avalue)
+    nentries=atable[0]
+    atable[nentries+1]=thehash
+    atable[0]=nentries+1
+    ^false
+    )
+  : (^true) ; found.
 )
 
+_ lookupByHash(avalue atable) (
+  thehash=hash(avalue)
+  nentries=atable[0]
+  i=0 ~(i<nentries) (
+    ?(atable[i+1]=thehash) (^true) ; found
+    i=i+1
+  )
+  ^false ; not found
+)
+
+_ globalExists(aname) (
+  ^lookupAndAdd(aname aGlobals)
+)
 
 ; Add a global with the given name and type (int or array)
 _ vaddGlobal(aname) (
@@ -706,8 +779,9 @@ _ vaddGlobal(aname) (
     aDATA[ndata]='_ ndata=ndata+1
     i=0 ~(aname[i]!0) (aDATA[ndata]=aname[i] i=i+1 ndata=ndata+1)
 
-    ; add :dd 0 or :dq 0
-    ? (aname[0]='a | aname[0]='A) ( vaddData(as GLOBALDQ 99999999) )
+    ; add :dq 0 or :dd 0
+    varType = inferVarType(aname[0])
+    ? (varType=VarTypeArr) ( vaddData(as GLOBALDQ 99999999) )
     : (vaddData(as GLOBALDD 99999999))
   )
 )
@@ -817,46 +891,124 @@ _ strLabel(aname) (
   $'_ printstr(aname 0) $': $10
 )
 
+
+; When not in a proc, the 0th entry will be 0.
+aCurrentProcName%1
+
+; Each entry is the hash of a procname
+allProcs%101 ; the 0th entry is the length
+aNumParams%100 ; # of params for each proc
+
+; Each entry is the hash of the index/4'th param name
+aParamNameHashes%400
+aParamTypes%400
+
+; We can calculate the offset based on the index
+; this will be reset after each proc
+aLocalNameHashes%12
+aLocalTypes%12
+
+_ lookupParamIndex(aParamName) (
+  ? (aCurrentProcName[0]=0) (
+    ; not in a proc
+    ^INDEXNOTFOUND
+  )
+  theHash=hash(aParamName)
+  procNum=allProcs[0]-1
+  ; $'p $'n #procNum $10
+  numParams=aNumParams[procNum]
+  ; $'N $'P #numParams $10
+  i=0 ~(i<numParams) (
+    index=procNum*4+i
+    ?(aParamNameHashes[index]=theHash) ( ^i )
+    i=i+1
+  )
+  ^INDEXNOTFOUND
+)
+
+_ registerParam(aParamName) (
+  index=lookupParamIndex(aParamName)
+  ? (index<INDEXNOTFOUND) (
+    ; duplicate param
+    ptwo(DUPLICATE PARAM) printstr(aParamName 0) fail(atoken) ^0
+  )
+
+  procNum=allProcs[0]-1
+  numParams=aNumParams[procNum]
+  ? (numParams=4) (
+    ; If too many aprams, stop
+    ptwo(TOOMANY PARAM) $'i $'n $32 printstr(aCurrentProcName 0) fail(atoken) ^0
+  )
+  index=procNum*4+numParams
+  theHash=hash(aParamName)
+  aParamNameHashes[index] = theHash
+  aParamTypes[index] = inferVarType(aParamName[0])
+  aNumParams[procNum] = numParams+1
+
+  vadvance() 
+)
+
+_ registerProc() (
+  found = lookupByHash(aCurrentProcName allProcs)
+  ? (found) (
+    ; Dupe p roc
+    ptwo(DUPLICATE PROC) printstr(aCurrentProcName 0) fail(atoken) ^0
+  )
+  lookupAndAdd(aCurrentProcName allProcs)
+)
+
+
 _ defineProc() (
+  ?(aCurrentProcName[0]!0) (
+    ; already in proc
+    pone(ALREADY) $'i $'n $32 pone(PROC) printstr(aCurrentProcName 0) fail(atoken) ^0
+  )
   expectSymbol(PROCDEF)
-  aname=acopyValue()
+
+  aCurrentProcName=acopyValue()
   vadvance()
+
   labelAfterProc = nextLabel()
   jmp(labelAfterProc)
-  strLabel(aname)
+
+  strLabel(aCurrentProcName)
+  registerProc()
 
   push(RBP)
   mov() reg(RBP) $', reg(RSP) $10
 
-  ; We won't be counting locals, because reasons.
-  ; sub RSP, ${locals*8}
-  ; allocate 96 bytes for loals.
+  ; allocate 96 bytes for locals.
+  ; sub RSP, 96
   pone(SUB) reg(RSP) $', #96 $10
-
-  ; TODO: start a new symbol table
 
   offset=8
   expectSymbol(OPENPAREN)
   ~(isSymbol(CLOSEPAREN)=false & atoken[0]!EOF) (
-    ; TODO: register param name and offset
     ? (atoken[0]!VAR) ( fail(atoken) ^0 ) 
-    : ( vadvance() )
+    : ( 
+      ; register param name and offset
+      aParamName = acopyValue()
+      registerParam(aParamName)
+    )
+    offset = offset + 8
   )
   expectSymbol(CLOSEPAREN)
-
-  ; TODO: declare proc. should fail if already exists
 
   expectSymbol(OPENPAREN)
   ~ (atoken[0]!EOF & isSymbol(CLOSEPAREN)=false) (
     statement()
   )
   expectSymbol(CLOSEPAREN)
-  $'_ $'e $'n $'d strLabel(aname)
+  $'e $'n $'d strLabel(aCurrentProcName)
   mov() reg(RSP) $', reg(RBP) $10
   pop(RBP)
   $'r $'e $'t $10
 
   emitLabel(labelAfterProc)
+
+  ; clear/reset symbol table
+  aCurrentProcName[0]=0
+  aLocalNameHashes[0]=0
 )
 
 
@@ -865,7 +1017,6 @@ _ startsWithSymbol() (
   ? ( atoken[1]=PRINTCH | atoken[1]=PRINTINT) ( ^parsePrint() )
   ? ( atoken[1]=STOP) ( ^parseStop() )
   ? ( atoken[1]=WHILE) ( ^parseWhile() )
-  ; if starts with _, function declaration
   ? ( atoken[1]=PROCDEF) ( ^defineProc() )
 
   ; TODO ^ ret
@@ -877,9 +1028,15 @@ _ varAssignment(avarname) (
   vadvance() ; eat the =
   expr()
 
-  vaddGlobal(avarname)
-  ; TODO: look up the offset of this variable in the current symbol table
-  mov() printVar(avarname 0) $', reg(EAX) $10
+  ? (aCurrentProcName[0]=0) (
+    ; we're not in a proc, add global
+    vaddGlobal(avarname)
+  )
+  : (
+    ; in a proc, look up local or param
+  )
+  srcReg=getDestReg(avarname[0])
+  mov() printVar(avarname 0) $', reg(srcReg) $10
 )
 
 _ parseAllocArray(avarname) (
