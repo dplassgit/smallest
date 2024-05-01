@@ -280,8 +280,8 @@ as[j]=32 j=j+1
 as[j]='m j=j+1
 as[j]='a j=j+1
 as[j]='n j=j+1
-as[j]='y j=j+2
-as[j]='V j=j+1 VARNOTFOUND=j
+as[j]='y j=j+2 VARNOTFOUND=j
+as[j]='V j=j+1
 as[j]='a j=j+1
 as[j]='r j=j+1
 as[j]=32 j=j+1
@@ -666,15 +666,13 @@ _ printVar(avarname) (
   ? (aCurrentProcName[0]!0) (
     ; we're in a proc, try param
     paramIndex = lookupParamIndex(avarname)
-    ;$'; $'p $'i #paramIndex $10
     ? (paramIndex!INDEXNOTFOUND) (
       found=true
       reg(RBP) $'+ #((paramIndex+2)*8)
     )
     : (
-      ; look up local
+      ; not param; look up local
       index = lookupByHash(avarname aLocalNameHashes)
-      ;$'; $'l $'i #index $10
       ? (index!INDEXNOTFOUND) (
         found=true
         reg(RBP) $'- #((index+1)*8)
@@ -682,9 +680,13 @@ _ printVar(avarname) (
     )
   )
 
-  ;$'; $'f #found $10
   ? (found=false) (
-    ; assume global
+    ; not param or local (or not in a proc)
+    ? (lookupByHash(avarname aGlobals)=INDEXNOTFOUND) (
+      ; not in global table, no good.
+      pone(VARNOTFOUND) $': printstr(avarname 0) $10 fail(atoken)
+    )
+
     $'_ printstr(avarname 0)
   )
 
@@ -720,7 +722,7 @@ _ parseArrayGet(avarname) (
   )
 
   expectSymbol(OPENBRACKET)
-  expr()  ; TODO: make sure it's an int
+  expr()  ; TODO: must be int
   expectSymbol(CLOSEBRACKET)
 
   ; emit("imul EAX, 4  ; from index to offset")
@@ -749,7 +751,6 @@ _ parseAtom() (
 
   ? (atoken[0]=VAR) (
     avar = acopyValue()
-    ; TODO: LOOK UP variable and make sure it exists!
     vadvance()
 
     ; if [ do array dereference
@@ -760,7 +761,6 @@ _ parseAtom() (
     ; use RAX if array
     destReg=getDestReg(avar[0])
 
-    ; look up the offset of this variable in the current symbol table
     mov() reg(destReg) $', printVar(avar) $10
 
     ^(inferVarType(avar[0]))
@@ -1044,14 +1044,28 @@ _ defineProc() (
 )
 
 
+_ parseReturn() (
+  ? (aCurrentProcName[0]=0) (
+    ; not in a proc, this is an error
+    $'N $'o $'t $32 $'i $'n $32 pone(PROC) $10 fail(atoken)
+  )
+  
+  expectSymbol(RETURN) ; eat the return
+  retType = expr() ; TODO: make sure it's the right type
+
+  pone(JMP) $'e $'n $'d $'_ printstr(aCurrentProcName 0) $10
+
+  ^retType
+)
+
+
 _ startsWithSymbol() (
   ? ( atoken[1]=IF) ( ^parseIf() )
   ? ( atoken[1]=PRINTCH | atoken[1]=PRINTINT) ( ^parsePrint() )
   ? ( atoken[1]=STOP) ( ^parseStop() )
   ? ( atoken[1]=WHILE) ( ^parseWhile() )
   ? ( atoken[1]=PROCDEF) ( ^defineProc() )
-
-  ; TODO ^ ret
+  ? ( atoken[1]=RETURN) ( ^parseReturn() )
   $'s $'w $'s fail(atoken)
 )
 
@@ -1065,7 +1079,7 @@ _ maybeRegisterLocal(avarname) (
     index = lookupParamIndex(avarname)
     ? (index=INDEXNOTFOUND) (
       ; register local
-      index = lookupOrAdd(avarname aLocalNameHashes)
+      lookupOrAdd(avarname aLocalNameHashes)
     )
   )
 )
@@ -1080,7 +1094,7 @@ _ varAssignment(avarname) (
     vaddGlobal(avarname)
   )
   : (
-    ; in a proc, maybe register local
+    ; in a proc, register local
     maybeRegisterLocal(avarname)
   )
   srcReg=getDestReg(avarname[0])
@@ -1088,8 +1102,8 @@ _ varAssignment(avarname) (
 )
 
 _ parseAllocArray(avarname) (
-  ; TODO: do not add as global if not in global scope unless
-  ; it is already defined in global scope
+  ; TODO: DO NOT ADD AS GLOBAL IF NOT IN GLOBAL SCOPE UNLESS
+  ; IT IS ALREADY DEFINED IN GLOBAL SCOPE
   vaddGlobal(avarname)
   vadvance() ; eat the %
   expr()
@@ -1109,10 +1123,8 @@ _ parseAllocArray(avarname) (
 
 
 _ parseArraySet(avarname) (
-  ; TODO: make sure array exists
-
   expectSymbol(OPENBRACKET)
-  indexType = expr()   ; TODO check return type
+  indexType = expr()   ; TODO must be int
   expectSymbol(CLOSEBRACKET)
 
   expectSymbol(EQ)
