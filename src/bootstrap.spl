@@ -266,7 +266,7 @@ as[j]='P j=j+1 PROC=j
 as[j]='r j=j+1
 as[j]='o j=j+1
 as[j]='c j=j+2 ALREADY=j
-as[j]='A j=j+1 
+as[j]='A j=j+1
 as[j]='l j=j+1
 as[j]='r j=j+1
 as[j]='e j=j+1
@@ -325,6 +325,56 @@ _ fail(at) (
   ptwo(BAD TOKEN) $': $32 printToken(at)
   \ ; exit now
 )
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Registers
+
+RAX=0 RBX=1 RCX=2 RDX=3
+EAX=4 EBX=5 ECX=6 EDX=7
+RBP=8 RSP=9
+
+_ reg(name) (
+  ? (name=RBP) ( $'R $'B $'P ^0)
+  ? (name=RSP) ( $'R $'S $'P ^0)
+  ? (name<EAX) ( $'R $(name+'A))
+  : ( $'E $(name-EAX+'A))
+  $'X
+)
+
+_ mov() ( $'m $'o $'v $32 )
+
+_ xfer(dest src) (
+  mov() reg(dest) $', reg(src) $10
+)
+
+_ push(register) (
+  pone(PUSH) reg(register) $10
+)
+
+_ pop(register) (
+  pone(POP) reg(register) $10
+)
+
+
+_ call(start) (
+  ptwo(CALL start) $10
+)
+
+_ emitExtern(function) (
+ ; extern (function)
+ ptwo(EXTERN function) $10
+ ; sub rsp, 32
+ pone(SUB) reg(RSP) $', #32 $10
+ call(function)
+ ; add rsp, 32
+ pone(ADD) reg(RSP) $', #32 $10
+)
+
+_ emitLabel(labelid)  (
+  $'L #labelid $': $10
+)
+
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Lexer globals
@@ -448,7 +498,6 @@ _ aNextToken() (
 ;; PARSER
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-
 ;; Current token
 atoken%1 ; this allocation will get thrown away
 
@@ -464,65 +513,6 @@ _ vadvance() (
   atoken = aNextToken()
 )
 
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Print helpers
-
-; Print variable with the given offset. 0 offset=global
-_ printVar(avarname offset) (
-  ? (offset=0) ( $'[ $'_ printstr(avarname 0) $'])
-  : ($'p $'v fail(atoken))
-)
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Registers
-
-RAX=0 RBX=1 RCX=2 RDX=3
-EAX=4 EBX=5 ECX=6 EDX=7
-RBP=8 RSP=9
-
-_ reg(name) (
-  ? (name=RBP) ( $'R $'B $'P ^0)
-  ? (name=RSP) ( $'R $'S $'P ^0)
-  ? (name<EAX) ( $'R $(name+'A))
-  : ( $'E $(name-EAX+'A))
-  $'X
-)
-
-_ mov() ( $'m $'o $'v $32 )
-
-_ xfer(dest src) (
-  mov() reg(dest) $', reg(src) $10
-)
-
-_ push(register) (
-  pone(PUSH) reg(register) $10
-)
-
-_ pop(register) (
-  pone(POP) reg(register) $10
-)
-
-
-_ call(start) (
-  ptwo(CALL start) $10
-)
-
-_ emitExtern(function) (
- ; extern (function)
- ptwo(EXTERN function) $10
- ; sub rsp, 32
- pone(SUB) reg(RSP) $', #32 $10
- call(function)
- ; add rsp, 32
- pone(ADD) reg(RSP) $', #32 $10
-)
-
-_ emitLabel(labelid)  (
-  $'L #labelid $': $10
-)
-
-
 ; Copy the value of the token into a new array.
 _ acopyValue() (
   i=0 ~(atoken[i+1]!0) (i=i+1)
@@ -532,187 +522,55 @@ _ acopyValue() (
 )
 
 
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Var types
+;; SYMBOL TABLE (ish)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 VarTypeInt=1
 VarTypeArr=2
 
+; When not in a proc, the 0th entry will be 0.
+aCurrentProcName%1
 
-_ expectSymbol(s) (
-  ? (isSymbol(s)=true) ( vadvance() ^0 )
-  pone(EXPECTED) $s $32 $'s $'a $'w $32 $atoken[1] $10 
-  fail(atoken)
-)
+; Each entry is the hash of a procname
+allProcs%101 ; the 0th entry is the length
+aNumParams%100 ; # of params for each proc
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Expression parsing
+; Each entry is the hash of the index/4'th param name
+aParamNameHashes%400
+aParamTypes%400
 
-_ inferVarType(first) (
-  ?(first='a | first='A) (^VarTypeArr)
-  ^VarTypeInt
-)
-
-_ getDestReg(first) (
-  ?(first='a | first='A) (^RAX)
-  ^EAX
-)
-
-_ parseArrayGet(avarname) (
-  varType = inferVarType(avarname[0])
-  ? (varType!VarTypeArr) (
-    ; Not array
-    $'N $'A fail(atoken) ^0
-  )
-
-  expectSymbol(OPENBRACKET)
-  expr()  ; TODO: make sure it's an int
-  expectSymbol(CLOSEBRACKET)
-
-  ; emit("imul EAX, 4  ; from index to offset")
-  pone(IMUL) reg(EAX) $', #4 $10
-
-  ; TODO: look up the offset of this variable in the current symbol table
-  ; add RAX, ${sym.get.location()}
-  pone(ADD) reg(RAX) $', printVar(avarname 0) $10
-
-  ; mov EAX, [RAX]
-  mov() reg(EAX) $', $'[ reg(RAX) $'] $10
-  ^VarTypeInt
-)
+; We can calculate the offset based on the index.
+; This will be reset after each proc
+aLocalNameHashes%12
+aLocalTypes%12
 
 INDEXNOTFOUND=9999
 
-_ parseAtom() (
-  ? (atoken[0]=CONST) (
-    mov() reg(EAX) $', printstr(atoken 1) $10
-    vadvance()
-    ^VarTypeInt
+_ lookupParamIndex(aParamName) (
+  ? (aCurrentProcName[0]=0) (
+    ; not in a proc
+    ^INDEXNOTFOUND
   )
-  ? (atoken[0]=CHARCONST) (
-    ; print as a number
-    mov() reg(EAX) $', #atoken[1] $10
-    vadvance()
-    ^VarTypeInt
+  theHash=hash(aParamName)
+  procNum=allProcs[0]-1
+  ; $'p $'n #procNum $10
+  numParams=aNumParams[procNum]
+  ; $'N $'P #numParams $10
+  i=0 ~(i<numParams) (
+    index=procNum*4+i
+    ?(aParamNameHashes[index]=theHash) ( ^i )
+    i=i+1
   )
-
-  ? (atoken[0]=VAR) (
-    avar = acopyValue()
-    ; TODO: LOOK UP variable and make sure it exists!
-    vadvance()
-
-    ; if [ do array dereference
-    ? (isSymbol(OPENBRACKET)) (^parseArrayGet(avar))
-
-    ; TODO: if ( do function call
-
-    ; use RAX if array
-    destReg=getDestReg(avar[0])
-
-    ; look up the offset of this variable in the current symbol table
-    paramIndex = lookupParamIndex(avar)
-    ? (paramIndex!INDEXNOTFOUND) (
-      mov() reg(destReg) $', 
-        $'[ reg(RBP) $'+ #((paramIndex+1)*8) $'] $10
-    )
-    ; TODO: lookup local
-    : ( mov() reg(destReg) $', printVar(avar 0) $10 )
-
-    ^(inferVarType(avar[0]))
-  )
-
-  ? (isSymbol(OPENPAREN)) (
-    expectSymbol(OPENPAREN)
-    varType = expr()
-    expectSymbol(CLOSEPAREN)
-    ^varType
-  )
-
-  : ( $'a $'t $'o $'m fail(atoken) )
-  ^0
+  ^INDEXNOTFOUND
 )
-
-_ isSymbol(s) (
-  ^(atoken[0]=SYM & atoken[1]=s)
-)
-
-_ rhs(op leftType) (
-  pop(RBX)
-  ? (op=PLUS) ( pone(ADD) reg(EAX) $', reg(EBX) $10 ^leftType)
-  ? (op=MULT) ( pone(IMUL) reg(EAX) $', reg(EBX) $10 ^leftType)
-  ? (op=AND) ( pone(ANDOP) reg(EAX) $', reg(EBX) $10 ^leftType)
-  ? (op=OR) ( pone(OROP) reg(EAX) $', reg(EBX) $10 ^leftType)
-  ? (op=EQ) (
-    ; cmp EBX, EAX
-    ; setz AL
-    ; and rax, 15
-    pone(CMP) reg(EBX) $', reg(EAX) $10
-    pone(SETZ) $'A $'L $10
-    pone(ANDOP) reg(EAX) $', #15 $10
-    ^leftType
-  )
-  ? (op=NEQ) (
-    ; cmp EBX, EAX
-    ; setnz AL
-    ; and rax, 15
-    pone(CMP) reg(EBX) $', reg(EAX) $10
-    pone(SETNZ) $'A $'L $10
-    pone(ANDOP) reg(EAX) $', #15 $10
-    ^leftType
-  )
-  ? (op=LT) (
-    ; cmp EBX, EAX
-    ; setl AL
-    ; and rax, 15
-    pone(CMP) reg(EBX) $', reg(EAX) $10
-    pone(SETL) $'A $'L $10
-    pone(ANDOP) reg(EAX) $', #15 $10
-    ^leftType
-  )
-  ? (op=MINUS) (
-    ; xchg EAX, EBX
-    ; sub EAX, EBX
-    pone(XCHG) reg(EAX) $', reg(EBX) $10
-    pone(SUB) reg(EAX) $', reg(EBX) $10
-    ^leftType
-  )
-  $'U $'n ptwo(EXPECTED SYMBOL) $op $10 fail(atoken)
-)
-
-aPREC%8 j=0
-aPREC[j]=MULT j=j+1
-aPREC[j]=MINUS j=j+1
-aPREC[j]=PLUS j=j+1
-aPREC[j]=LT j=j+1
-aPREC[j]=NEQ j=j+1
-aPREC[j]=EQ j=j+1
-aPREC[j]=AND j=j+1
-aPREC[j]=OR
-
-_ exprLevel(level) (
-  ? (level<0) ( ^parseAtom() )
-  leftType = exprLevel(level-1)
-  op = aPREC[level]
-  ~ (isSymbol(op)) (
-    vadvance()
-    push(RAX)
-    rightType = exprLevel(level - 1)
-    rhs(op leftType)
-  )
-  ^leftType
-)
-
-_ expr() (
-  ^exprLevel(7)
-)
-
 
 ;; Data segment
 aDATA%1000 ndata=0 ; # of bytes of data
 intFmtAdded=false
 
-;; Hash codes of global data names
-aGlobals%100 nhashes=0
+;; Hash values of global data names
+aGlobals%100
 
 _ vaddData(asource start end) (
   i=start
@@ -785,6 +643,196 @@ _ vaddGlobal(aname) (
     : (vaddData(as GLOBALDD 99999999))
   )
 )
+
+
+; Print variable: proc, local or global.
+_ printVar(avarname) (
+
+  $'[
+
+  found=false
+  ? (aCurrentProcName[0]!0) (
+    ; we're in a proc, try param
+    paramIndex = lookupParamIndex(avarname)
+    ? (paramIndex!INDEXNOTFOUND) (
+      found=true
+      reg(RBP) $'+ #((paramIndex+1)*8)
+    )
+    : (
+      ; TODO: look up local
+    )
+  )
+
+  ? (found=false) (
+    ; assume global
+    $'_ printstr(avarname 0)
+  )
+
+  $']
+)
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Expression parsing
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+_ expectSymbol(s) (
+  ? (isSymbol(s)=true) ( vadvance() ^0 )
+  pone(EXPECTED) $s $32 $'s $'a $'w $32 $atoken[1] $10
+  fail(atoken)
+)
+
+_ inferVarType(first) (
+  ?(first='a | first='A) (^VarTypeArr)
+  ^VarTypeInt
+)
+
+_ getDestReg(first) (
+  ?(first='a | first='A) (^RAX)
+  ^EAX
+)
+
+_ parseArrayGet(avarname) (
+  varType = inferVarType(avarname[0])
+  ? (varType!VarTypeArr) (
+    ; Not array
+    $'N $'A fail(atoken) ^0
+  )
+
+  expectSymbol(OPENBRACKET)
+  expr()  ; TODO: make sure it's an int
+  expectSymbol(CLOSEBRACKET)
+
+  ; emit("imul EAX, 4  ; from index to offset")
+  pone(IMUL) reg(EAX) $', #4 $10
+
+  ; add RAX, ${sym.get.location()}
+  pone(ADD) reg(RAX) $', printVar(avarname) $10
+
+  ; mov EAX, [RAX]
+  mov() reg(EAX) $', $'[ reg(RAX) $'] $10
+  ^VarTypeInt
+)
+
+_ parseAtom() (
+  ? (atoken[0]=CONST) (
+    mov() reg(EAX) $', printstr(atoken 1) $10
+    vadvance()
+    ^VarTypeInt
+  )
+  ? (atoken[0]=CHARCONST) (
+    ; print as a number
+    mov() reg(EAX) $', #atoken[1] $10
+    vadvance()
+    ^VarTypeInt
+  )
+
+  ? (atoken[0]=VAR) (
+    avar = acopyValue()
+    ; TODO: LOOK UP variable and make sure it exists!
+    vadvance()
+
+    ; if [ do array dereference
+    ? (isSymbol(OPENBRACKET)) (^parseArrayGet(avar))
+
+    ; TODO: if ( do function call
+
+    ; use RAX if array
+    destReg=getDestReg(avar[0])
+
+    ; look up the offset of this variable in the current symbol table
+    mov() reg(destReg) $', printVar(avar) $10
+
+    ^(inferVarType(avar[0]))
+  )
+
+  ? (isSymbol(OPENPAREN)) (
+    expectSymbol(OPENPAREN)
+    varType = expr()
+    expectSymbol(CLOSEPAREN)
+    ^varType
+  )
+
+  : ( $'a $'t $'o $'m fail(atoken) )
+  ^0
+)
+
+_ isSymbol(s) (
+  ^(atoken[0]=SYM & atoken[1]=s)
+)
+
+_ rhs(op leftType) (
+  pop(RBX)
+  ? (op=PLUS) ( pone(ADD) reg(EAX) $', reg(EBX) $10 ^leftType)
+  ? (op=MULT) ( pone(IMUL) reg(EAX) $', reg(EBX) $10 ^leftType)
+  ? (op=AND) ( pone(ANDOP) reg(EAX) $', reg(EBX) $10 ^leftType)
+  ? (op=OR) ( pone(OROP) reg(EAX) $', reg(EBX) $10 ^leftType)
+  ? (op=EQ) (
+    ; cmp EBX, EAX
+    ; setz AL
+    ; and rax, 15
+    pone(CMP) reg(EBX) $', reg(EAX) $10
+    pone(SETZ) $'A $'L $10
+    pone(ANDOP) reg(EAX) $', #15 $10
+    ^leftType
+  )
+  ? (op=NEQ) (
+    ; cmp EBX, EAX
+    ; setnz AL
+    ; and rax, 15
+    pone(CMP) reg(EBX) $', reg(EAX) $10
+    pone(SETNZ) $'A $'L $10
+    pone(ANDOP) reg(EAX) $', #15 $10
+    ^leftType
+  )
+  ? (op=LT) (
+    ; cmp EBX, EAX
+    ; setl AL
+    ; and rax, 15
+    pone(CMP) reg(EBX) $', reg(EAX) $10
+    pone(SETL) $'A $'L $10
+    pone(ANDOP) reg(EAX) $', #15 $10
+    ^leftType
+  )
+  ? (op=MINUS) (
+    ; xchg EAX, EBX
+    ; sub EAX, EBX
+    pone(XCHG) reg(EAX) $', reg(EBX) $10
+    pone(SUB) reg(EAX) $', reg(EBX) $10
+    ^leftType
+  )
+  $'U $'n ptwo(EXPECTED SYMBOL) $op $10 fail(atoken)
+)
+
+
+; Operator Precedences
+aPREC%8 j=0
+aPREC[j]=MULT j=j+1
+aPREC[j]=MINUS j=j+1
+aPREC[j]=PLUS j=j+1
+aPREC[j]=LT j=j+1
+aPREC[j]=NEQ j=j+1
+aPREC[j]=EQ j=j+1
+aPREC[j]=AND j=j+1
+aPREC[j]=OR
+
+_ exprLevel(level) (
+  ? (level<0) ( ^parseAtom() )
+  leftType = exprLevel(level-1)
+  op = aPREC[level]
+  ~ (isSymbol(op)) (
+    vadvance()
+    push(RAX)
+    rightType = exprLevel(level - 1)
+    rhs(op leftType)
+  )
+  ^leftType
+)
+
+_ expr() (
+  ^exprLevel(7)
+)
+
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -891,41 +939,6 @@ _ strLabel(aname) (
   $'_ printstr(aname 0) $': $10
 )
 
-
-; When not in a proc, the 0th entry will be 0.
-aCurrentProcName%1
-
-; Each entry is the hash of a procname
-allProcs%101 ; the 0th entry is the length
-aNumParams%100 ; # of params for each proc
-
-; Each entry is the hash of the index/4'th param name
-aParamNameHashes%400
-aParamTypes%400
-
-; We can calculate the offset based on the index
-; this will be reset after each proc
-aLocalNameHashes%12
-aLocalTypes%12
-
-_ lookupParamIndex(aParamName) (
-  ? (aCurrentProcName[0]=0) (
-    ; not in a proc
-    ^INDEXNOTFOUND
-  )
-  theHash=hash(aParamName)
-  procNum=allProcs[0]-1
-  ; $'p $'n #procNum $10
-  numParams=aNumParams[procNum]
-  ; $'N $'P #numParams $10
-  i=0 ~(i<numParams) (
-    index=procNum*4+i
-    ?(aParamNameHashes[index]=theHash) ( ^i )
-    i=i+1
-  )
-  ^INDEXNOTFOUND
-)
-
 _ registerParam(aParamName) (
   index=lookupParamIndex(aParamName)
   ? (index<INDEXNOTFOUND) (
@@ -945,13 +958,13 @@ _ registerParam(aParamName) (
   aParamTypes[index] = inferVarType(aParamName[0])
   aNumParams[procNum] = numParams+1
 
-  vadvance() 
+  vadvance()
 )
 
 _ registerProc() (
   found = lookupByHash(aCurrentProcName allProcs)
   ? (found) (
-    ; Dupe p roc
+    ; Dupe proc
     ptwo(DUPLICATE PROC) printstr(aCurrentProcName 0) fail(atoken) ^0
   )
   lookupAndAdd(aCurrentProcName allProcs)
@@ -984,8 +997,8 @@ _ defineProc() (
   offset=8
   expectSymbol(OPENPAREN)
   ~(isSymbol(CLOSEPAREN)=false & atoken[0]!EOF) (
-    ? (atoken[0]!VAR) ( fail(atoken) ^0 ) 
-    : ( 
+    ? (atoken[0]!VAR) ( fail(atoken) ^0 )
+    : (
       ; register param name and offset
       aParamName = acopyValue()
       registerParam(aParamName)
@@ -1036,7 +1049,7 @@ _ varAssignment(avarname) (
     ; in a proc, look up local or param
   )
   srcReg=getDestReg(avarname[0])
-  mov() printVar(avarname 0) $', reg(srcReg) $10
+  mov() printVar(avarname) $', reg(srcReg) $10
 )
 
 _ parseAllocArray(avarname) (
@@ -1044,7 +1057,7 @@ _ parseAllocArray(avarname) (
   ; it is already defined in global scope
   vaddGlobal(avarname)
   vadvance() ; eat the %
-  expr() 
+  expr()
 
   ; emit("imul EAX, 4")
   pone(IMUL) reg(EAX) $', #4 $10
@@ -1056,8 +1069,7 @@ _ parseAllocArray(avarname) (
   emitExtern(CALLOC)
 
   ;emit(s"mov ${sym.location()}, RAX")
-  ; TODO: look up the offset of this variable in the current symbol table
-  mov() printVar(avarname 0) $', reg(RAX) $10
+  mov() printVar(avarname) $', reg(RAX) $10
 )
 
 
@@ -1073,8 +1085,7 @@ _ parseArraySet(avarname) (
   ; emit("imul EAX, 4  ; from index to offset")
   pone(IMUL) reg(EAX) $', #4 $10
   ; emit(s"add RAX, ${sym.get.location()}  ; absolute location")
-  ; TODO: look up the offset of this variable in the current symbol table
-  pone(ADD) reg(RAX) $', printVar(avarname 0) $10
+  pone(ADD) reg(RAX) $', printVar(avarname) $10
   ; emit("push RAX  ; array location")
   push(RAX)
 
