@@ -281,6 +281,19 @@ as[j]='m j=j+1
 as[j]='a j=j+1
 as[j]='n j=j+1
 as[j]='y j=j+2
+as[j]='V j=j+1 VARNOTFOUND=j
+as[j]='a j=j+1
+as[j]='r j=j+1
+as[j]=32 j=j+1
+as[j]='n j=j+1
+as[j]='o j=j+1
+as[j]='t j=j+1
+as[j]=32 j=j+1
+as[j]='f j=j+1
+as[j]='o j=j+1
+as[j]='u j=j+1
+as[j]='n j=j+1
+as[j]='d j=j+2
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -538,12 +551,10 @@ aNumParams%100 ; # of params for each proc
 
 ; Each entry is the hash of the index/4'th param name
 aParamNameHashes%400
-aParamTypes%400
 
 ; We can calculate the offset based on the index.
 ; This will be reset after each proc
 aLocalNameHashes%12
-aLocalTypes%12
 
 INDEXNOTFOUND=9999
 
@@ -602,32 +613,33 @@ _ hash(astring) (
   ^r
 )
 
+_ lookupByHash(avalue atable) (
+  thehash=hash(avalue)
+  nentries=atable[0]
+  i=0 ~(i<nentries) (
+    ?(atable[i+1]=thehash) (^i) ; found
+    i=i+1
+  )
+  ^INDEXNOTFOUND ; not found
+)
+
 ; returns true if found, false if not
 ; if not found, adds to the end
-_ lookupAndAdd(avalue atable) (
-  ? (lookupByHash(avalue atable)=false) (
+_ lookupOrAdd(avalue atable) (
+  index = lookupByHash(avalue atable)
+  ? (index=INDEXNOTFOUND) (
     ; not found, add to the end
     thehash=hash(avalue)
     nentries=atable[0]
     atable[nentries+1]=thehash
     atable[0]=nentries+1
-    ^false
+    ^nentries
     )
-  : (^true) ; found.
-)
-
-_ lookupByHash(avalue atable) (
-  thehash=hash(avalue)
-  nentries=atable[0]
-  i=0 ~(i<nentries) (
-    ?(atable[i+1]=thehash) (^true) ; found
-    i=i+1
-  )
-  ^false ; not found
+  : (^index) ; found.
 )
 
 _ globalExists(aname) (
-  ^lookupAndAdd(aname aGlobals)
+  ^(lookupOrAdd(aname aGlobals)!INDEXNOTFOUND)
 )
 
 ; Add a global with the given name and type (int or array)
@@ -654,15 +666,23 @@ _ printVar(avarname) (
   ? (aCurrentProcName[0]!0) (
     ; we're in a proc, try param
     paramIndex = lookupParamIndex(avarname)
+    ;$'; $'p $'i #paramIndex $10
     ? (paramIndex!INDEXNOTFOUND) (
       found=true
-      reg(RBP) $'+ #((paramIndex+1)*8)
+      reg(RBP) $'+ #((paramIndex+2)*8)
     )
     : (
-      ; TODO: look up local
+      ; look up local
+      index = lookupByHash(avarname aLocalNameHashes)
+      ;$'; $'l $'i #index $10
+      ? (index!INDEXNOTFOUND) (
+        found=true
+        reg(RBP) $'- #((index+1)*8)
+      )
     )
   )
 
+  ;$'; $'f #found $10
   ? (found=false) (
     ; assume global
     $'_ printstr(avarname 0)
@@ -955,19 +975,18 @@ _ registerParam(aParamName) (
   index=procNum*4+numParams
   theHash=hash(aParamName)
   aParamNameHashes[index] = theHash
-  aParamTypes[index] = inferVarType(aParamName[0])
   aNumParams[procNum] = numParams+1
 
   vadvance()
 )
 
 _ registerProc() (
-  found = lookupByHash(aCurrentProcName allProcs)
-  ? (found) (
+  index = lookupByHash(aCurrentProcName allProcs)
+  ? (index!INDEXNOTFOUND) (
     ; Dupe proc
     ptwo(DUPLICATE PROC) printstr(aCurrentProcName 0) fail(atoken) ^0
   )
-  lookupAndAdd(aCurrentProcName allProcs)
+  lookupOrAdd(aCurrentProcName allProcs)
 )
 
 
@@ -1019,7 +1038,7 @@ _ defineProc() (
 
   emitLabel(labelAfterProc)
 
-  ; clear/reset symbol table
+  ; clear/reset symbol tables
   aCurrentProcName[0]=0
   aLocalNameHashes[0]=0
 )
@@ -1036,6 +1055,21 @@ _ startsWithSymbol() (
   $'s $'w $'s fail(atoken)
 )
 
+_ maybeRegisterLocal(avarname) (
+  ? (lookupByHash(avarname aGlobals)=INDEXNOTFOUND) (
+    ; global not found, maybe local or param
+    ? (aCurrentProcName[0]=0) (
+      ; not in a proc, this is an error
+      pone(VARNOTFOUND) $': printstr(avarname 0) $10 fail(atoken)
+    )
+    index = lookupParamIndex(avarname)
+    ? (index=INDEXNOTFOUND) (
+      ; register local
+      index = lookupOrAdd(avarname aLocalNameHashes)
+    )
+  )
+)
+
 
 _ varAssignment(avarname) (
   vadvance() ; eat the =
@@ -1046,7 +1080,8 @@ _ varAssignment(avarname) (
     vaddGlobal(avarname)
   )
   : (
-    ; in a proc, look up local or param
+    ; in a proc, maybe register local
+    maybeRegisterLocal(avarname)
   )
   srcReg=getDestReg(avarname[0])
   mov() printVar(avarname) $', reg(srcReg) $10
