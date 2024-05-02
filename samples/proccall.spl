@@ -1,5 +1,6 @@
-_ foo() (^1+2)
+_ foo(b c) (# c $10 # b $ 10 ^1+2) ; should be 5 1
 
-b=foo()
-# b $10 ; should be 3
-? b=3 ($'y$10) : ($'N$10)
+foo(1 2+3)
+;b=foo()
+;# b $10 ; should be 3
+;? b=3 ($'y$10) : ($'N$10)

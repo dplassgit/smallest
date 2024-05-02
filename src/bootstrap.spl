@@ -612,6 +612,8 @@ _ hash(astring) (
   ^r
 )
 
+; Returns the index into the table MINUS ONE
+; or INDEXNOTFOUND if not found.
 _ lookupByHash(avalue atable) (
   thehash=hash(avalue)
   nentries=atable[0]
@@ -622,7 +624,7 @@ _ lookupByHash(avalue atable) (
   ^INDEXNOTFOUND ; not found
 )
 
-; returns index if found, INDEXNOTFOUND if not
+; returns true if found, false if not
 ; if not found, adds to the end
 _ lookupOrAdd(avalue atable) (
   index = lookupByHash(avalue atable)
@@ -632,15 +634,15 @@ _ lookupOrAdd(avalue atable) (
     nentries=atable[0]
     atable[nentries+1]=thehash
     atable[0]=nentries+1
+    ^false ; not found
   )
-  ^index ; maybe found or not
+  ^true  ; found
 )
 
 ; returns true if found, false if not
 ; if not found, adds to the end
 _ lookupOrAddGlobal(aname) (
-  index=lookupOrAdd(aname aGlobals)
-  ^(index!INDEXNOTFOUND)
+  ^lookupOrAdd(aname aGlobals)
 )
 
 ; Add a global with the given name and type (int or array)
@@ -668,8 +670,12 @@ _ printVar(avarname) (
     ; we're in a proc, try param
     paramIndex = lookupParamIndex(avarname)
     ? (paramIndex!INDEXNOTFOUND) (
+      ; found as a param
+      ; we're in the current proc, just use its data.
+      procNum=allProcs[0]-1
+      numParams=aNumParams[procNum]
       found=true
-      reg(RBP) $'+ #((paramIndex+2)*8)
+      reg(RBP) $'+ #((numParams-paramIndex+1)*8)
     )
     : (
       ; not param; look up local
@@ -1015,16 +1021,14 @@ _ defineProc() (
   ; sub RSP, 96
   print(SUB) reg(RSP) $', #96 $10
 
-  offset=8
   expectSymbol(OPENPAREN)
   ~(isSymbol(CLOSEPAREN)=false & atoken[0]!EOF) (
     ? (atoken[0]!VAR) ( fail(atoken) ^0 )
     : (
-      ; register param name and offset
+      ; register param name
       aParamName = acopyValue()
       registerParam(aParamName)
     )
-    offset = offset + 8
   )
   expectSymbol(CLOSEPAREN)
 
@@ -1080,7 +1084,7 @@ _ maybeRegisterLocal(avarname) (
     )
     index = lookupParamIndex(avarname)
     ? (index=INDEXNOTFOUND) (
-      ; register local
+      ; register local; if already there, does nothing.
       lookupOrAdd(avarname aLocalNameHashes)
     )
   )
@@ -1151,6 +1155,31 @@ _ parseArraySet(avarname) (
   mov() $'[ reg(RBX) $'] $', reg(EAX) $10
 )
 
+_ procCall(aprocname voidAllowed) (
+  expectSymbol(OPENPAREN)
+  ; Look up the proc
+  ;index = lookupByHash(aprocname allProcs)
+  ; don't do anything if it's not found, to allow forward
+  ; references.
+
+  nActuals=0
+  ~ (isSymbol(CLOSEPAREN)=false & atoken[0]!EOF) (
+    expr()
+    ; push arg onto stack
+    push(RAX)
+    nActuals = nActuals + 1
+  )
+  expectSymbol(CLOSEPAREN)
+  print(CALL) $'_ printstr(aprocname 0) $10
+  ; TODO: check return type
+
+  ? (nActuals!0) (
+    ; adjust stack for pushed params
+    ; emit(s"add RSP, ${actual*8}
+    print(ADD) reg(RSP) $', #nActuals*8 $10
+  )
+)
+
 
 _ startsWithVar() (
   aname=acopyValue()
@@ -1158,8 +1187,7 @@ _ startsWithVar() (
   ? (isSymbol(EQ)) ( varAssignment(aname) )
   ? (isSymbol(LENGTH)) ( ^parseAllocArray(aname) )
   ? (isSymbol(OPENBRACKET)) ( ^parseArraySet(aname) )
-
-  ; TODO: if ( do function call
+  ? (isSymbol(OPENPAREN)) ( ^procCall(aname true) )
 )
 
 
