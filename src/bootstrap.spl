@@ -762,8 +762,8 @@ _ parseAtom() (
 
     ; if [ do array dereference
     ? (isSymbol(OPENBRACKET)) (^parseArrayGet(avarname))
-
-    ; TODO: if ( do function call
+    ;  if ( do function call
+    ? (isSymbol(OPENPAREN)) (^procCall(avarname false))
 
     ; use RAX if array
     destReg=getDestReg(avarname[0])
