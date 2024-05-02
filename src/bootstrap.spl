@@ -757,20 +757,20 @@ _ parseAtom() (
   )
 
   ? (atoken[0]=VAR) (
-    avar = acopyValue()
+    avarname = acopyValue()
     vadvance()
 
     ; if [ do array dereference
-    ? (isSymbol(OPENBRACKET)) (^parseArrayGet(avar))
+    ? (isSymbol(OPENBRACKET)) (^parseArrayGet(avarname))
 
     ; TODO: if ( do function call
 
     ; use RAX if array
-    destReg=getDestReg(avar[0])
+    destReg=getDestReg(avarname[0])
 
-    mov() reg(destReg) $', printVar(avar) $10
+    mov() reg(destReg) $', printVar(avarname) $32 $'; $32 printstr(avarname 0) $10
 
-    ^(inferVarType(avar[0]))
+    ^(inferVarType(avarname[0]))
   )
 
   ? (isSymbol(OPENPAREN)) (
@@ -1110,7 +1110,7 @@ _ varAssignment(avarname) (
   expr() ; TODO: check the return type
 
   srcReg=getDestReg(avarname[0])
-  mov() printVar(avarname) $', reg(srcReg) $10
+  mov() printVar(avarname) $', reg(srcReg) $32 $'; $32 printstr(avarname 0) $10
 )
 
 _ parseAllocArray(avarname) (
@@ -1130,7 +1130,7 @@ _ parseAllocArray(avarname) (
   emitExtern(CALLOC)
 
   ; emit(s"mov ${sym.location()}, RAX")
-  mov() printVar(avarname) $', reg(RAX) $10
+  mov() printVar(avarname) $', reg(RAX)  $32 $'; $32 printstr(avarname 0) $10
 )
 
 
@@ -1144,7 +1144,7 @@ _ parseArraySet(avarname) (
   ; emit("imul EAX, 4  ; from index to offset")
   print(IMUL) reg(EAX) $', #4 $10
   ; emit(s"add RAX, ${sym.get.location()}  ; absolute location")
-  print(ADD) reg(RAX) $', printVar(avarname) $10
+  print(ADD) reg(RAX) $', printVar(avarname)   $32 $'; $32 printstr(avarname 0) $10
   ; emit("push RAX  ; array location")
   push(RAX)
 
