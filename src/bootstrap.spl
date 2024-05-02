@@ -555,7 +555,7 @@ aParamNameHashes%400
 ; This will be reset after each proc
 aLocalNameHashes%12
 
-INDEXNOTFOUND=9999
+INDEXNOTFOUND=999999
 
 _ lookupParamIndex(aParamName) (
   ? (aCurrentProcName[0]=0) (
@@ -622,7 +622,7 @@ _ lookupByHash(avalue atable) (
   ^INDEXNOTFOUND ; not found
 )
 
-; returns true if found, false if not
+; returns index if found, INDEXNOTFOUND if not
 ; if not found, adds to the end
 _ lookupOrAdd(avalue atable) (
   index = lookupByHash(avalue atable)
@@ -632,13 +632,15 @@ _ lookupOrAdd(avalue atable) (
     nentries=atable[0]
     atable[nentries+1]=thehash
     atable[0]=nentries+1
-    ^nentries
-    )
-  : (^index) ; found.
+  )
+  ^index ; maybe found or not
 )
 
+; returns true if found, false if not
+; if not found, adds to the end
 _ lookupOrAddGlobal(aname) (
-  ^(lookupOrAdd(aname aGlobals)!INDEXNOTFOUND)
+  index=lookupOrAdd(aname aGlobals)
+  ^(index!INDEXNOTFOUND)
 )
 
 ; Add a global with the given name and type (int or array)
@@ -680,10 +682,10 @@ _ printVar(avarname) (
   )
 
   ? (found=false) (
-    ; not param or local (or not in a proc)
+    ; not param or local, or not in a proc
     ? (lookupByHash(avarname aGlobals)=INDEXNOTFOUND) (
       ; not in global table, no good.
-      print(VARNOTFOUND) $': printstr(avarname 0) $10 fail(atoken)
+      $10 print(VARNOTFOUND) $': printstr(avarname 0) $10 fail(atoken)
     )
 
     $'_ printstr(avarname 0)
@@ -699,7 +701,7 @@ _ printVar(avarname) (
 
 _ expectSymbol(s) (
   ? (isSymbol(s)=true) ( vadvance() ^0 )
-  print(EXPECTED) $s $32 $'s $'a $'w $32 $atoken[1] $10
+  print(EXPECTED) $s $', $32 $'s $'a $'w $32 $atoken[1] $10
   fail(atoken)
 )
 
@@ -1117,7 +1119,7 @@ _ parseAllocArray(avarname) (
   ; emitExtern("calloc")
   emitExtern(CALLOC)
 
-  ;emit(s"mov ${sym.location()}, RAX")
+  ; emit(s"mov ${sym.location()}, RAX")
   mov() printVar(avarname) $', reg(RAX) $10
 )
 
