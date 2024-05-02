@@ -1087,10 +1087,7 @@ _ maybeRegisterLocal(avarname) (
 )
 
 
-_ varAssignment(avarname) (
-  vadvance() ; eat the =
-  expr()
-
+_ vRegisterVariable(avarname) (
   ? (aCurrentProcName[0]=0) (
     ; we're not in a proc, add global
     vaddGlobal(avarname)
@@ -1099,16 +1096,25 @@ _ varAssignment(avarname) (
     ; in a proc, register local
     maybeRegisterLocal(avarname)
   )
+)
+
+
+_ varAssignment(avarname) (
+  vRegisterVariable(avarname)
+  vadvance() ; eat the =
+
+  expr() ; TODO: check the return type
+
   srcReg=getDestReg(avarname[0])
   mov() printVar(avarname) $', reg(srcReg) $10
 )
 
 _ parseAllocArray(avarname) (
-  ; TODO: DO NOT ADD AS GLOBAL IF NOT IN GLOBAL SCOPE UNLESS
-  ; IT IS ALREADY DEFINED IN GLOBAL SCOPE
-  vaddGlobal(avarname)
+  ; TODO: check vartype of avarname
+  vRegisterVariable(avarname)
   vadvance() ; eat the %
-  expr()
+
+  expr()  ; TODO: must be int
 
   ; emit("imul EAX, 4")
   print(IMUL) reg(EAX) $', #4 $10
