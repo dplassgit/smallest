@@ -10,10 +10,21 @@ false=0
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Input
 
-;ainput%20 j=0
-;ainput[j]='$ j=j+1
-;ainput[j]='' j=j+1
-;ainput[j]='y j=j+1
+ainput%20 j=0
+ainput[j]='$ j=j+1
+ainput[j]='' j=j+1
+ainput[j]='h j=j+1
+ainput[j]='$ j=j+1
+ainput[j]='' j=j+1
+ainput[j]='i j=j+1
+ainput[j]=32 j=j+1
+ainput[j]='i j=j+1
+ainput[j]='= j=j+1
+ainput[j]='3 j=j+1
+ainput[j]='1 j=j+1
+ainput[j]='4 j=j+1
+ainput[j]='# j=j+1
+ainput[j]='i j=j+1
 ainput@
 
 
@@ -538,6 +549,7 @@ _ acopyValue() (
 ;; SYMBOL TABLE (ish)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+VarTypeVoid=0
 VarTypeInt=1
 VarTypeArr=2
 
@@ -576,16 +588,20 @@ _ lookupParamIndex(aParamName) (
 )
 
 ;; Data segment
-aDATA%1000 ndata=0 ; # of bytes of data
+MAXDATA=2000
+aDATA%MAXDATA ndata=0 ; # of bytes of data
 intFmtAdded=false
 
 ;; Hash values of global data names
-aGlobals%100
+aGlobals%1000
 
 _ vaddData(asource start end) (
   i=start
   ~ (i<end & asource[i]!0) (aDATA[ndata]=asource[i] i=i+1 ndata=ndata+1)
   aDATA[ndata]=10 ndata=ndata+1
+  ?(MAXDATA<ndata) (
+    print(TOOMANY) $'d $'a $'t $'a $10 fail(atoken)
+  )
 )
 
 aPRIMES%10
@@ -655,7 +671,9 @@ _ vaddGlobal(aname) (
     ; add :dq 0 or :dd 0
     varType = inferVarType(aname[0])
     ? (varType=VarTypeArr) ( vaddData(as GLOBALDQ 99999999) )
-    : (vaddData(as GLOBALDD 99999999))
+    : (
+      vaddData(as GLOBALDD 99999999)
+    )
   )
 )
 
@@ -1080,6 +1098,7 @@ _ maybeRegisterLocal(avarname) (
     ; global not found, maybe local or param
     ? (aCurrentProcName[0]=0) (
       ; not in a proc, this is an error
+      $10 $'N $'P $32
       print(VARNOTFOUND) $': printstr(avarname 0) $10 fail(atoken)
     )
     index = lookupParamIndex(avarname)
@@ -1178,6 +1197,12 @@ _ procCall(aprocname voidAllowed) (
     ; emit(s"add RSP, ${actual*8}
     print(ADD) reg(RSP) $', #nActuals*8 $10
   )
+  ; TODO return vartype: void, int, array
+)
+
+_ parseInput(avarname) (
+  $'; $'i $'n $'p $'u $'t $32 printstr(avarname 0) $10
+  vadvance()
 )
 
 
@@ -1188,6 +1213,7 @@ _ startsWithVar() (
   ? (isSymbol(LENGTH)) ( ^parseAllocArray(aname) )
   ? (isSymbol(OPENBRACKET)) ( ^parseArraySet(aname) )
   ? (isSymbol(OPENPAREN)) ( ^procCall(aname true) )
+  ? (isSymbol(INPUT)) ( ^parseInput(aname) )
 )
 
 
@@ -1206,8 +1232,6 @@ _ statements() (
 )
 
 _ parse() (
-  ; $'; printstr(ainput 0)
-
   vadvanceLexer() ; prime the lexer
   vadvance() ; prime the parser
 
