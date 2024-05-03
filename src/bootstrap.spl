@@ -304,7 +304,33 @@ as[j]='f j=j+1
 as[j]='o j=j+1
 as[j]='u j=j+1
 as[j]='n j=j+1
-as[j]='d j=j+2
+as[j]='d j=j+3 RET=j
+as[j]='r j=j+1
+as[j]='e j=j+1
+as[j]='t j=j+2 NOTIN=j
+as[j]='N j=j+1
+as[j]='o j=j+1
+as[j]='t j=j+1
+as[j]=32 j=j+1
+as[j]='i j=j+1
+as[j]='n j=j+2 SAW=j
+as[j]='s j=j+1
+as[j]='a j=j+1
+as[j]='w j=j+2 ARRAY=j
+as[j]='a j=j+1
+as[j]='r j=j+1
+as[j]='r j=j+1
+as[j]='a j=j+1
+as[j]='y j=j+2 VOID=j
+as[j]='v j=j+1
+as[j]='o j=j+1
+as[j]='i j=j+1
+as[j]='d j=j+2 INT=j
+as[j]='i j=j+1
+as[j]='n j=j+1
+as[j]='t j=j+2
+
+
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -576,9 +602,7 @@ _ lookupParamIndex(aParamName) (
   )
   theHash=hash(aParamName)
   procNum=allProcs[0]-1
-  ; $'p $'n #procNum $10
   numParams=aNumParams[procNum]
-  ; $'N $'P #numParams $10
   i=0 ~(i<numParams) (
     index=procNum*4+i
     ?(aParamNameHashes[index]=theHash) ( ^i )
@@ -739,15 +763,27 @@ _ getDestReg(first) (
   ^EAX
 )
 
+_ printType(varType) (
+  ?(varType=VarTypeVoid) (print(VOID))
+  ?(varType=VarTypeInt) (print(INT))
+  ?(varType=VarTypeArr) (print(ARRAY))
+)
+
+
+_ checkTypes(expectedType seenType) (
+  ?(expectedType=seenType) (^0)
+  print(EXPECTED) printType(expectedType) print(SAW) print(seenType) $10
+  fail(atoken)
+)
+
+
 _ parseArrayGet(avarname) (
   varType = inferVarType(avarname[0])
-  ? (varType!VarTypeArr) (
-    ; Not array
-    $'N $'A fail(atoken) ^0
-  )
+  checkTypes(VarTypeArr varType)
 
   expectSymbol(OPENBRACKET)
-  expr()  ; TODO: must be int
+  exprType = expr()
+  checkTypes(VarTypeInt exprType)
   expectSymbol(CLOSEBRACKET)
 
   ; emit("imul EAX, 4  ; from index to offset")
@@ -922,7 +958,8 @@ _ jmp(labelId) (
 
 _ parseIf() (
   expectSymbol(IF)
-  expr() ; TODO must be int
+  exprType = expr()
+  checkTypes(VarTypeInt exprType)
 
   elseLabel = nextLabel()
   endIfLabel = nextLabel()
@@ -963,7 +1000,8 @@ _ parseWhile() (
   endLabel = nextLabel()
   emitLabel(startLabel)
 
-  expr()  ; TODO: must be int
+  exprType = expr()
+  checkTypes(VarTypeInt exprType)
 
   ; cmp al, 0
   printtwo(CMP ALCOMMAZERO) $10
@@ -995,7 +1033,7 @@ _ registerParam(aParamName) (
   procNum=allProcs[0]-1
   numParams=aNumParams[procNum]
   ? (numParams=4) (
-    ; Too many aprams, stop
+    ; Too many params, stop
     printtwo(TOOMANY PARAM) $'i $'n $32 printstr(aCurrentProcName 0) fail(atoken) ^0
   )
   index=procNum*4+numParams
@@ -1058,7 +1096,7 @@ _ defineProc() (
   $'e $'n $'d strLabel(aCurrentProcName)
   mov() reg(RSP) $', reg(RBP) $10
   pop(RBP)
-  $'r $'e $'t $10
+  print(RET) $10
 
   emitLabel(labelAfterProc)
 
@@ -1071,7 +1109,7 @@ _ defineProc() (
 _ parseReturn() (
   ? (aCurrentProcName[0]=0) (
     ; not in a proc, this is an error
-    $'N $'o $'t $32 $'i $'n $32 print(PROC) $10 fail(atoken)
+    printtwo(NOTIN PROC) $10 fail(atoken)
   )
   
   expectSymbol(RETURN) ; eat the return
@@ -1090,7 +1128,7 @@ _ startsWithSymbol() (
   ? ( atoken[1]=WHILE) ( ^parseWhile() )
   ? ( atoken[1]=PROCDEF) ( ^defineProc() )
   ? ( atoken[1]=RETURN) ( ^parseReturn() )
-  $'s $'w $'s fail(atoken)
+  fail(atoken)
 )
 
 _ maybeRegisterLocal(avarname) (
@@ -1098,12 +1136,15 @@ _ maybeRegisterLocal(avarname) (
     ; global not found, maybe local or param
     ? (aCurrentProcName[0]=0) (
       ; not in a proc, this is an error
-      $10 $'N $'P $32
+      printtwo(NOTIN PROC) $10
       print(VARNOTFOUND) $': printstr(avarname 0) $10 fail(atoken)
     )
     index = lookupParamIndex(avarname)
     ? (index=INDEXNOTFOUND) (
       ; register local; if already there, does nothing.
+      ? (aLocalNameHashes[0]=11) (
+        print(TOOMANY) $'v $'a $'r $'s $10 fail(atoken) ^0
+      )
       lookupOrAdd(avarname aLocalNameHashes)
     )
   )
@@ -1123,21 +1164,25 @@ _ vRegisterVariable(avarname) (
 
 
 _ varAssignment(avarname) (
+  varType = inferVarType(avarname)
   vRegisterVariable(avarname)
   vadvance() ; eat the =
 
-  expr() ; TODO: check the return type
+  exprType = expr()
+  checkTypes(varType exprType)
 
   srcReg=getDestReg(avarname[0])
   mov() printVar(avarname) $', reg(srcReg) $32 $'; $32 printstr(avarname 0) $10
 )
 
 _ parseAllocArray(avarname) (
-  ; TODO: check vartype of avarname
+  varType = inferVarType(avarname)
+  checkTypes(VarTypeArr varType)
   vRegisterVariable(avarname)
   vadvance() ; eat the %
 
-  expr()  ; TODO: must be int
+  exprType = expr()
+  checkTypes(VarTypeInt exprType)
 
   ; emit("imul EAX, 4")
   print(IMUL) reg(EAX) $', #4 $10
@@ -1155,7 +1200,8 @@ _ parseAllocArray(avarname) (
 
 _ parseArraySet(avarname) (
   expectSymbol(OPENBRACKET)
-  indexType = expr()   ; TODO must be int
+  indexType = expr()
+  checkTypes(VarTypeInt indexType)
   expectSymbol(CLOSEBRACKET)
 
   expectSymbol(EQ)
@@ -1236,18 +1282,20 @@ _ parse() (
   vadvance() ; prime the parser
 
   ; global main
-  printstr(as HEADER) $10
+  print(HEADER) $10
   ; section .text
   printtwo(SECTION DOTTEXT) $10
+  ; extern exit
+  printtwo(EXTERN EXIT) $10 $10
 
-  printstr(as MAIN) $': $10
+  print(MAIN) $': $10
 
   statements()
 
   ; call exit
-  emitExtern(EXIT)
+  call(EXIT)
   ; ret
-  $'r $'e $'t $10
+  print(RET) $10
 
   ? (ndata!0) (
     $10
