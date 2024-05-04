@@ -10,21 +10,7 @@ false=0
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Input
 
-ainput%20 j=0
-ainput[j]='$ j=j+1
-ainput[j]='' j=j+1
-ainput[j]='h j=j+1
-ainput[j]='$ j=j+1
-ainput[j]='' j=j+1
-ainput[j]='i j=j+1
-ainput[j]=32 j=j+1
-ainput[j]='i j=j+1
-ainput[j]='= j=j+1
-ainput[j]='3 j=j+1
-ainput[j]='1 j=j+1
-ainput[j]='4 j=j+1
-ainput[j]='# j=j+1
-ainput[j]='i j=j+1
+ainput%1
 ainput@
 
 
@@ -1065,8 +1051,10 @@ _ registerProc() (
   lookupOrAdd(aCurrentProcName allProcs)
 )
 
+hasreturn=false
 
 _ defineProc() (
+  hasreturn=false
   ?(aCurrentProcName[0]!0) (
     ; Already in proc
     printtwo(ALREADY IN) print(PROC) printstr(aCurrentProcName 0) fail(atoken) ^0
@@ -1105,7 +1093,9 @@ _ defineProc() (
     statement()
   )
   expectSymbol(CLOSEPAREN)
-  $'e $'n $'d strLabel(aCurrentProcName)
+  ? (hasreturn) (
+    $'e $'n $'d strLabel(aCurrentProcName)
+  )
   mov() reg(RSP) $', reg(RBP) $10
   pop(RBP)
   print(RET) $10
@@ -1119,6 +1109,7 @@ _ defineProc() (
 
 
 _ parseReturn() (
+  hasreturn=true
   ? (aCurrentProcName[0]=0) (
     ; not in a proc, this is an error
     printtwo(NOTIN PROC) $10 fail(atoken)
