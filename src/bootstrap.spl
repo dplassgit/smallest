@@ -311,7 +311,7 @@ as[j]='t j=j+2 NOTIN=j
 as[j]='N j=j+1
 as[j]='o j=j+1
 as[j]='t j=j+1
-as[j]=32 j=j+1
+as[j]=32 j=j+1 IN=j
 as[j]='i j=j+1
 as[j]='n j=j+2 SAW=j
 as[j]='s j=j+1
@@ -328,8 +328,12 @@ as[j]='i j=j+1
 as[j]='d j=j+2 INT=j
 as[j]='i j=j+1
 as[j]='n j=j+1
-as[j]='t j=j+2
-
+as[j]='t j=j+2 READ=j
+as[j]='_ j=j+1
+as[j]='r j=j+1
+as[j]='e j=j+1
+as[j]='a j=j+1
+as[j]='d j=j+2
 
 
 
@@ -381,9 +385,11 @@ _ fail(at) (
 
 RAX=0 RBX=1 RCX=2 RDX=3
 EAX=4 EBX=5 ECX=6 EDX=7
-RBP=8 RSP=9
+RBP=8 RSP=9 AL=10 CL=11
 
 _ reg(name) (
+  ? (name=AL) ( $'A $'L ^0)
+  ? (name=CL) ( $'C $'L ^0)
   ? (name=RBP) ( $'R $'B $'P ^0)
   ? (name=RSP) ( $'R $'S $'P ^0)
   ? (name<EAX) ( $'R $(name+'A))
@@ -405,6 +411,14 @@ _ pop(register) (
   print(POP) reg(register) $10
 )
 
+_ getDestReg(first) (
+  ?(first='a) (^RAX)
+  ^EAX
+)
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Calls 
 
 _ call(start) (
   printtwo(CALL start) $10
@@ -747,6 +761,12 @@ _ printVar(avarname) (
 ;; Expression parsing
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+; returns true if the current token is a symbol with the
+; given symbol type
+_ isSymbol(s) (
+  ^(atoken[0]=SYM & atoken[1]=s)
+)
+
 _ expectSymbol(s) (
   ? (isSymbol(s)=true) ( vadvance() ^0 )
   print(EXPECTED) $s $', $32 $'s $'a $'w $32 $atoken[1] $10
@@ -754,25 +774,21 @@ _ expectSymbol(s) (
 )
 
 _ inferVarType(first) (
-  ?(first='a | first='A) (^VarTypeArr)
+  ; note lower case only
+  ?(first='a) (^VarTypeArr)
   ^VarTypeInt
 )
 
-_ getDestReg(first) (
-  ?(first='a | first='A) (^RAX)
-  ^EAX
-)
-
 _ printType(varType) (
-  ?(varType=VarTypeVoid) (print(VOID))
-  ?(varType=VarTypeInt) (print(INT))
-  ?(varType=VarTypeArr) (print(ARRAY))
+  ?(varType=VarTypeVoid) (print(VOID) ^0)
+  ?(varType=VarTypeInt) (print(INT) ^0)
+  ?(varType=VarTypeArr) (print(ARRAY) ^0)
+  $'U $'n print(EXPECTED) #varType $'? $10
 )
-
 
 _ checkTypes(expectedType seenType) (
   ?(expectedType=seenType) (^0)
-  print(EXPECTED) printType(expectedType) print(SAW) print(seenType) $10
+  print(EXPECTED) printType(expectedType) print(SAW) printType(seenType) $10
   fail(atoken)
 )
 
@@ -824,7 +840,7 @@ _ parseAtom() (
 
     mov() reg(destReg) $', printVar(avarname) $32 $'; $32 printstr(avarname 0) $10
 
-    ^(inferVarType(avarname[0]))
+    ^inferVarType(avarname[0])
   )
 
   ? (isSymbol(OPENPAREN)) (
@@ -834,53 +850,48 @@ _ parseAtom() (
     ^varType
   )
 
-  : ( $'a $'t $'o $'m fail(atoken) )
-  ^0
+  $'a $'t $'o $'m fail(atoken)
 )
 
-_ isSymbol(s) (
-  ^(atoken[0]=SYM & atoken[1]=s)
-)
-
-_ rhs(op leftType) (
+_ emitArithmeticOp(op) (
   pop(RBX)
-  ? (op=PLUS) ( print(ADD) reg(EAX) $', reg(EBX) $10 ^leftType)
-  ? (op=MULT) ( print(IMUL) reg(EAX) $', reg(EBX) $10 ^leftType)
-  ? (op=AND) ( print(ANDOP) reg(EAX) $', reg(EBX) $10 ^leftType)
-  ? (op=OR) ( print(OROP) reg(EAX) $', reg(EBX) $10 ^leftType)
+  ? (op=PLUS) ( print(ADD) reg(EAX) $', reg(EBX) $10 ^0)
+  ? (op=MULT) ( print(IMUL) reg(EAX) $', reg(EBX) $10 ^0)
+  ? (op=MINUS) (
+    ; xchg EAX, EBX
+    ; sub EAX, EBX
+    print(XCHG) reg(EAX) $', reg(EBX) $10
+    print(SUB) reg(EAX) $', reg(EBX) $10
+    ^0
+  )
+  ? (op=AND) ( print(ANDOP) reg(EAX) $', reg(EBX) $10 ^0)
+  ? (op=OR) ( print(OROP) reg(EAX) $', reg(EBX) $10 ^0)
   ? (op=EQ) (
     ; cmp EBX, EAX
     ; setz AL
-    ; and rax, 15
+    ; and rax, 0x1
     print(CMP) reg(EBX) $', reg(EAX) $10
-    print(SETZ) $'A $'L $10
-    print(ANDOP) reg(EAX) $', #15 $10
-    ^leftType
+    print(SETZ) reg(AL) $10
+    print(ANDOP) reg(EAX) $', #1 $10
+    ^0
   )
   ? (op=NEQ) (
     ; cmp EBX, EAX
     ; setnz AL
     ; and rax, 15
     print(CMP) reg(EBX) $', reg(EAX) $10
-    print(SETNZ) $'A $'L $10
-    print(ANDOP) reg(EAX) $', #15 $10
-    ^leftType
+    print(SETNZ) reg(AL) $10
+    print(ANDOP) reg(EAX) $', #1 $10
+    ^0
   )
   ? (op=LT) (
     ; cmp EBX, EAX
     ; setl AL
     ; and rax, 15
     print(CMP) reg(EBX) $', reg(EAX) $10
-    print(SETL) $'A $'L $10
-    print(ANDOP) reg(EAX) $', #15 $10
-    ^leftType
-  )
-  ? (op=MINUS) (
-    ; xchg EAX, EBX
-    ; sub EAX, EBX
-    print(XCHG) reg(EAX) $', reg(EBX) $10
-    print(SUB) reg(EAX) $', reg(EBX) $10
-    ^leftType
+    print(SETL) reg(AL) $10
+    print(ANDOP) reg(EAX) $', #1 $10
+    ^0
   )
   $'U $'n printtwo(EXPECTED SYMBOL) $op $10 fail(atoken)
 )
@@ -905,7 +916,8 @@ _ exprLevel(level) (
     vadvance()
     push(RAX)
     rightType = exprLevel(level - 1)
-    rhs(op leftType)
+    checkTypes(leftType rightType)
+    emitArithmeticOp(op)
   )
   ^leftType
 )
@@ -1057,7 +1069,7 @@ _ registerProc() (
 _ defineProc() (
   ?(aCurrentProcName[0]!0) (
     ; Already in proc
-    print(ALREADY) $'i $'n $32 print(PROC) printstr(aCurrentProcName 0) fail(atoken) ^0
+    printtwo(ALREADY IN) print(PROC) printstr(aCurrentProcName 0) fail(atoken) ^0
   )
   expectSymbol(PROCDEF)
 
@@ -1113,7 +1125,9 @@ _ parseReturn() (
   )
   
   expectSymbol(RETURN) ; eat the return
-  retType = expr() ; TODO: make sure it's the right type
+  retType = expr()
+  ; make sure it's the right type
+  checkTypes(inferRetType(aCurrentProcName[0]) retType)
 
   print(JMP) $'e $'n $'d $'_ printstr(aCurrentProcName 0) $10
 
@@ -1164,7 +1178,7 @@ _ vRegisterVariable(avarname) (
 
 
 _ varAssignment(avarname) (
-  varType = inferVarType(avarname)
+  varType = inferVarType(avarname[0])
   vRegisterVariable(avarname)
   vadvance() ; eat the =
 
@@ -1176,7 +1190,7 @@ _ varAssignment(avarname) (
 )
 
 _ parseAllocArray(avarname) (
-  varType = inferVarType(avarname)
+  varType = inferVarType(avarname[0])
   checkTypes(VarTypeArr varType)
   vRegisterVariable(avarname)
   vadvance() ; eat the %
@@ -1220,6 +1234,15 @@ _ parseArraySet(avarname) (
   mov() $'[ reg(RBX) $'] $', reg(EAX) $10
 )
 
+
+_ inferRetType(first) (
+  ; note lower case only
+  ?(first='a) (^VarTypeArr)
+  ?(first='v) (^VarTypeVoid)
+  ^VarTypeInt
+)
+
+
 _ procCall(aprocname voidAllowed) (
   expectSymbol(OPENPAREN)
   ; Look up the proc
@@ -1230,25 +1253,86 @@ _ procCall(aprocname voidAllowed) (
   nActuals=0
   ~ (isSymbol(CLOSEPAREN)=false & atoken[0]!EOF) (
     expr()
+    ; TODO: check param type
     ; push arg onto stack
     push(RAX)
     nActuals = nActuals + 1
   )
   expectSymbol(CLOSEPAREN)
   print(CALL) $'_ printstr(aprocname 0) $10
-  ; TODO: check return type
 
   ? (nActuals!0) (
     ; adjust stack for pushed params
     ; emit(s"add RSP, ${actual*8}
     print(ADD) reg(RSP) $', #nActuals*8 $10
   )
-  ; TODO return vartype: void, int, array
+
+  ; return vartype: void, int, array
+  ^ (inferRetType(aprocname[0]))
 )
 
 _ parseInput(avarname) (
-  $'; $'i $'n $'p $'u $'t $32 printstr(avarname 0) $10
-  vadvance()
+  expectSymbol(INPUT) ; eat the @
+  varType = inferVarType(avarname[0])
+  checkTypes(VarTypeArr varType)
+
+  ; emit("mov RCX, 1")
+  mov() reg(RCX) $', #1 $10
+  ; val onemb=1048576
+  ONEMB=1048576
+  ; emit(s"mov RDX, $onemb ; allocate 1mb")
+  mov() reg(RDX) $', #ONEMB $10
+  emitExtern(CALLOC)
+  ; emit("push RAX  ; location where stdin is written to")
+  push(RAX)
+
+  ; // 3. _read up to 256k of input
+  ; emit("mov RCX, 0  ; 0=stdio")
+  mov() reg(RCX) $', #0 $10
+  ; emit("mov RDX, RAX  ; destination")
+  xfer(RDX RAX)
+  ; emit(s"mov R8, $onemb  ; count")
+  mov() $'R #8 $', #ONEMB $10
+  ; emitExtern("_read")
+  emitExtern(READ)
+  ; emit("push RAX  ; # bytes read")
+  push(RAX)
+
+  ; // RAX is the # of bytes read
+  ; emit("imul EAX, 4")
+  print(IMUL) reg(EAX) $', #4 $10
+  ; emit("inc EAX")
+  $'i $'n $'c $32 reg(EAX) $10
+  ; emit("mov EDX, EAX")
+  xfer(EDX EAX)
+  ; emit("mov RCX, 1")
+  mov() reg(RCX) $', #1 $10
+  ; emitExtern("calloc")
+  emitExtern(CALLOC)
+  ; emit(s"mov ${sym.location()}, RAX  ; destination")
+  mov() printVar(avarname) $', reg(RAX) $10
+
+  ; // "spread" them so they are 4 bytes each
+  ; emit("pop RDX ; # bytes read")
+  pop(RDX)
+  ; emit("pop RBX ; stdin is here")
+  pop(RBX)
+  ; val loopLabel = nextLabel("loop")
+  labelId = nextLabel()
+  ; emitLabel(loopLabel)
+  emitLabel(labelId)
+  ; emit("mov BYTE cl, [rbx] ; read a byte")
+  mov() reg(CL) $', $'[ reg(RBX) $'] $10
+  ; emit("mov BYTE [rax], cl ; write a byte")
+  mov() $'[ reg(RAX) $'] $', reg(CL) $10
+  ; emit("inc RBX  ; next byte in source")
+  $'i $'n $'c $32 reg(RBX) $10
+  ; emit("add RAX, 4   ; next dword in dest")
+  print(ADD) reg(RAX) $', #4 $10
+  ; emit("dec RDX")
+  $'d $'e $'c $32 reg(RDX) $10
+  ; emit(s"jne $loopLabel")
+  $'j $'n $'e $32 $'L #labelId $10
 )
 
 

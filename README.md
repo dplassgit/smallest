@@ -55,7 +55,8 @@ When comparing ints, the result is an int (0 for false, 1 for true.)
 
 ## Variables
 
-Variables that start with `a` are arrays of ints. All other variables are ints.
+Variables that start with `a` (case sensitive) are arrays of ints. All other 
+variables are ints.
 
 Only *alphabetic characters* are allowed in variable names. Variable and function
 names are *case-sensitive*.
@@ -68,7 +69,7 @@ to read and modify.
 
 ### Naming
 
-Variables that start with `a` are arrays of ints.
+Variables that start with `a` (case sensitive) are arrays of ints.
 
 ### Declaration
 
@@ -112,8 +113,8 @@ There is no "array length" operator.
 
 Only alphabetic characters are allowed in function names.
 
-Functions that start with `v` are void. Functions that start with `a` return an array.
-All other functions return int.
+Functions that start with `v` (case sensitive) are void. Functions that start
+with `a` (case sensitive) return an array. All other functions return int.
 
 ### Declaration & call
 
