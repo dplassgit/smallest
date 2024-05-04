@@ -944,7 +944,7 @@ _ parsePrint() (
   )
   : (
     ; add data INT_FMT: db '%d', 0
-    ~ (intFmtAdded=false) (
+    ? (intFmtAdded=false) (
       vaddData(as INTFMT INTFMTEND)
       intFmtAdded=true
     )
