@@ -946,6 +946,7 @@ _ parsePrint() (
 
 _ parseStop() (
   vadvance()
+  mov() reg(RCX) $', #127 $10
   call(EXIT)
   ^0
 )
@@ -1368,6 +1369,7 @@ _ parse() (
   statements()
 
   ; call exit
+  mov() reg(RCX) $', #0 $10
   call(EXIT)
   ; ret
   print(RET) $10
