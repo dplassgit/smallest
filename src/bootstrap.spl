@@ -824,7 +824,7 @@ _ parseAtom() (
     ; use RAX if array
     destReg=getDestReg(avarname[0])
 
-    mov() reg(destReg) $', printVar(avarname) $32 $'; $32 printstr(avarname 0) $10
+    mov() reg(destReg) $', printVar(avarname) $10
 
     ^inferVarType(avarname[0])
   )
